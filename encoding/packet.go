@@ -8,6 +8,8 @@ import (
 type ProtocolVersion byte
 
 const (
+	// ProtocolVersion30 represents MQTT 3.0 (MQIsdp)
+	ProtocolVersion30 ProtocolVersion = 3
 	// ProtocolVersion311 represents MQTT 3.1.1
 	ProtocolVersion311 ProtocolVersion = 4
 	// ProtocolVersion50 represents MQTT 5.0
@@ -112,8 +114,8 @@ func ParseFixedHeaderWithVersion(r io.Reader, version ProtocolVersion) (*FixedHe
 	}
 
 	// Version-specific validation
-	if version == ProtocolVersion311 {
-		// MQTT 3.1.1: AUTH packet (15) doesn't exist
+	if version == ProtocolVersion30 || version == ProtocolVersion311 {
+		// MQTT 3.0 and 3.1.1: AUTH packet (15) doesn't exist
 		if header.Type > DISCONNECT {
 			return nil, ErrInvalidType
 		}
@@ -184,8 +186,8 @@ func ParseFixedHeaderFromBytesWithVersion(data []byte, version ProtocolVersion) 
 	}
 
 	// Version-specific validation
-	if version == ProtocolVersion311 {
-		// MQTT 3.1.1: AUTH packet (15) doesn't exist
+	if version == ProtocolVersion30 || version == ProtocolVersion311 {
+		// MQTT 3.0 and 3.1.1: AUTH packet (15) doesn't exist
 		if header.Type > DISCONNECT {
 			return nil, 0, ErrInvalidType
 		}
@@ -246,7 +248,7 @@ func (h *FixedHeader) EncodeFixedHeaderWithVersion(w io.Writer, version Protocol
 	}
 
 	// Version-specific validation
-	if version == ProtocolVersion311 {
+	if version == ProtocolVersion30 || version == ProtocolVersion311 {
 		if h.Type > DISCONNECT {
 			return ErrInvalidType
 		}
@@ -308,7 +310,7 @@ func (h *FixedHeader) EncodeFixedHeaderToBytesWithVersion(buf []byte, version Pr
 	}
 
 	// Version-specific validation
-	if version == ProtocolVersion311 {
+	if version == ProtocolVersion30 || version == ProtocolVersion311 {
 		if h.Type > DISCONNECT {
 			return 0, ErrInvalidType
 		}
