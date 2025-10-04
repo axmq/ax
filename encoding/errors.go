@@ -19,4 +19,20 @@ var (
 	ErrInvalidFlags        = errors.New("invalid flags for packet type")
 	ErrInvalidQoS          = errors.New("invalid QoS level")
 	ErrInvalidReservedType = errors.New("reserved packet type (0) not allowed")
+
+	// Property-related errors
+	ErrInvalidPropertyID   = errors.New("invalid property ID")
+	ErrInvalidPropertyType = errors.New("invalid property type")
+	ErrDuplicateProperty   = errors.New("duplicate property not allowed")
+	ErrMissingProperty     = errors.New("required property is missing")
+
+	// Packet-related errors
+	ErrInvalidProtocolName    = errors.New("invalid protocol name")
+	ErrInvalidProtocolVersion = errors.New("invalid protocol version")
+	ErrInvalidClientID        = errors.New("invalid client ID")
+	ErrInvalidTopicName       = errors.New("invalid topic name")
+	ErrInvalidTopicFilter     = errors.New("invalid topic filter")
+	ErrInvalidPacketID        = errors.New("invalid packet identifier")
+	ErrInvalidReasonCode      = errors.New("invalid reason code")
+	ErrMalformedPacket        = errors.New("malformed packet")
 )
