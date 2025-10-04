@@ -1,0 +1,199 @@
+package packet
+
+import (
+	"bytes"
+	"testing"
+)
+
+func BenchmarkParseFixedHeader(b *testing.B) {
+	tests := []struct {
+		name  string
+		input []byte
+	}{
+		{
+			name:  "CONNECT_1byte_remlen",
+			input: []byte{0x10, 0x0A},
+		},
+		{
+			name:  "PUBLISH_QoS0_1byte_remlen",
+			input: []byte{0x30, 0x7F},
+		},
+		{
+			name:  "PUBLISH_QoS1_2byte_remlen",
+			input: []byte{0x32, 0x80, 0x01},
+		},
+		{
+			name:  "PUBLISH_QoS2_DUP_Retain_4byte_remlen",
+			input: []byte{0x3D, 0xFF, 0xFF, 0xFF, 0x7F},
+		},
+		{
+			name:  "PINGREQ",
+			input: []byte{0xC0, 0x00},
+		},
+	}
+
+	for _, tt := range tests {
+		b.Run(tt.name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.SetBytes(int64(len(tt.input)))
+
+			for i := 0; i < b.N; i++ {
+				r := bytes.NewReader(tt.input)
+				_, err := ParseFixedHeader(r)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkParseFixedHeaderFromBytes(b *testing.B) {
+	tests := []struct {
+		name  string
+		input []byte
+	}{
+		{
+			name:  "CONNECT_1byte_remlen",
+			input: []byte{0x10, 0x0A},
+		},
+		{
+			name:  "PUBLISH_QoS0_1byte_remlen",
+			input: []byte{0x30, 0x7F},
+		},
+		{
+			name:  "PUBLISH_QoS1_2byte_remlen",
+			input: []byte{0x32, 0x80, 0x01},
+		},
+		{
+			name:  "PUBLISH_QoS2_DUP_Retain_4byte_remlen",
+			input: []byte{0x3D, 0xFF, 0xFF, 0xFF, 0x7F},
+		},
+		{
+			name:  "PINGREQ",
+			input: []byte{0xC0, 0x00},
+		},
+	}
+
+	for _, tt := range tests {
+		b.Run(tt.name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.SetBytes(int64(len(tt.input)))
+
+			for i := 0; i < b.N; i++ {
+				_, _, err := ParseFixedHeaderFromBytes(tt.input)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkEncodeVariableByteInteger(b *testing.B) {
+	tests := []struct {
+		name  string
+		value uint32
+	}{
+		{"1byte_0", 0},
+		{"1byte_127", 127},
+		{"2byte_128", 128},
+		{"2byte_16383", 16383},
+		{"3byte_16384", 16384},
+		{"3byte_2097151", 2097151},
+		{"4byte_2097152", 2097152},
+		{"4byte_max", 268435455},
+	}
+
+	for _, tt := range tests {
+		b.Run(tt.name, func(b *testing.B) {
+			b.ReportAllocs()
+
+			for i := 0; i < b.N; i++ {
+				_, err := EncodeVariableByteInteger(tt.value)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkDecodeVariableByteInteger(b *testing.B) {
+	tests := []struct {
+		name  string
+		input []byte
+	}{
+		{"1byte", []byte{0x00}},
+		{"2byte", []byte{0x80, 0x01}},
+		{"3byte", []byte{0x80, 0x80, 0x01}},
+		{"4byte", []byte{0xFF, 0xFF, 0xFF, 0x7F}},
+	}
+
+	for _, tt := range tests {
+		b.Run(tt.name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.SetBytes(int64(len(tt.input)))
+
+			for i := 0; i < b.N; i++ {
+				r := bytes.NewReader(tt.input)
+				_, err := decodeVariableByteInteger(r)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkDecodeVariableByteIntegerFromBytes(b *testing.B) {
+	tests := []struct {
+		name  string
+		input []byte
+	}{
+		{"1byte", []byte{0x00}},
+		{"2byte", []byte{0x80, 0x01}},
+		{"3byte", []byte{0x80, 0x80, 0x01}},
+		{"4byte", []byte{0xFF, 0xFF, 0xFF, 0x7F}},
+	}
+
+	for _, tt := range tests {
+		b.Run(tt.name, func(b *testing.B) {
+			b.ReportAllocs()
+			b.SetBytes(int64(len(tt.input)))
+
+			for i := 0; i < b.N; i++ {
+				_, _, err := decodeVariableByteIntegerFromBytes(tt.input)
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkTypeString(b *testing.B) {
+	types := []Type{CONNECT, PUBLISH, SUBSCRIBE, DISCONNECT}
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = types[i%len(types)].String()
+	}
+}
+
+func BenchmarkQoSString(b *testing.B) {
+	qosLevels := []QoS{QoS0, QoS1, QoS2}
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_ = qosLevels[i%len(qosLevels)].String()
+	}
+}
+
+func BenchmarkValidateFlags(b *testing.B) {
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		_ = validateFlags(CONNECT, 0x00)
+	}
+}
