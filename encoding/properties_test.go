@@ -357,3 +357,752 @@ func TestEncodeDecodeRoundTrip_AllPropertyTypes(t *testing.T) {
 
 	assert.Equal(t, []byte{0x01, 0x02, 0x03, 0x04}, parsed.Properties[6].Value)
 }
+
+func TestReadTwoByteIntFromBytes(t *testing.T) {
+	tests := []struct {
+		name      string
+		data      []byte
+		expected  uint16
+		expectErr bool
+	}{
+		{
+			name:     "valid two bytes",
+			data:     []byte{0x12, 0x34, 0xFF},
+			expected: 0x1234,
+		},
+		{
+			name:      "insufficient data",
+			data:      []byte{0x12},
+			expectErr: true,
+		},
+		{
+			name:      "empty data",
+			data:      []byte{},
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			val, n, err := readTwoByteIntFromBytes(tt.data)
+			if tt.expectErr {
+				assert.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expected, val)
+				assert.Equal(t, 2, n)
+			}
+		})
+	}
+}
+
+func TestReadFourByteIntFromBytes(t *testing.T) {
+	tests := []struct {
+		name      string
+		data      []byte
+		expected  uint32
+		expectErr bool
+	}{
+		{
+			name:     "valid four bytes",
+			data:     []byte{0x12, 0x34, 0x56, 0x78, 0xFF},
+			expected: 0x12345678,
+		},
+		{
+			name:      "insufficient data - 3 bytes",
+			data:      []byte{0x12, 0x34, 0x56},
+			expectErr: true,
+		},
+		{
+			name:      "insufficient data - 1 byte",
+			data:      []byte{0x12},
+			expectErr: true,
+		},
+		{
+			name:      "empty data",
+			data:      []byte{},
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			val, n, err := readFourByteIntFromBytes(tt.data)
+			if tt.expectErr {
+				assert.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expected, val)
+				assert.Equal(t, 4, n)
+			}
+		})
+	}
+}
+
+func TestReadUTF8StringFromBytes(t *testing.T) {
+	tests := []struct {
+		name      string
+		data      []byte
+		expected  string
+		expectErr bool
+	}{
+		{
+			name:     "valid string",
+			data:     []byte{0x00, 0x05, 'h', 'e', 'l', 'l', 'o', 0xFF},
+			expected: "hello",
+		},
+		{
+			name:     "empty string",
+			data:     []byte{0x00, 0x00},
+			expected: "",
+		},
+		{
+			name:      "insufficient length bytes",
+			data:      []byte{0x00},
+			expectErr: true,
+		},
+		{
+			name:      "incomplete string data",
+			data:      []byte{0x00, 0x05, 'h', 'i'},
+			expectErr: true,
+		},
+		{
+			name:      "no data",
+			data:      []byte{},
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			val, _, err := readUTF8StringFromBytes(tt.data)
+			if tt.expectErr {
+				assert.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expected, val)
+			}
+		})
+	}
+}
+
+func TestReadUTF8PairFromBytes(t *testing.T) {
+	tests := []struct {
+		name      string
+		data      []byte
+		expectedK string
+		expectedV string
+		expectErr bool
+	}{
+		{
+			name:      "valid pair",
+			data:      []byte{0x00, 0x03, 'k', 'e', 'y', 0x00, 0x05, 'v', 'a', 'l', 'u', 'e'},
+			expectedK: "key",
+			expectedV: "value",
+		},
+		{
+			name:      "empty key and value",
+			data:      []byte{0x00, 0x00, 0x00, 0x00},
+			expectedK: "",
+			expectedV: "",
+		},
+		{
+			name:      "incomplete key",
+			data:      []byte{0x00, 0x05, 'k', 'e'},
+			expectErr: true,
+		},
+		{
+			name:      "incomplete value",
+			data:      []byte{0x00, 0x03, 'k', 'e', 'y', 0x00, 0x05, 'v', 'a'},
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			val, n, err := readUTF8PairFromBytes(tt.data)
+			if tt.expectErr {
+				assert.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expectedK, val.Key)
+				assert.Equal(t, tt.expectedV, val.Value)
+				assert.Greater(t, n, 0)
+			}
+		})
+	}
+}
+
+func TestReadBinaryDataFromBytes(t *testing.T) {
+	tests := []struct {
+		name      string
+		data      []byte
+		expected  []byte
+		expectErr bool
+	}{
+		{
+			name:     "valid binary data",
+			data:     []byte{0x00, 0x05, 0x01, 0x02, 0x03, 0x04, 0x05, 0xFF},
+			expected: []byte{0x01, 0x02, 0x03, 0x04, 0x05},
+		},
+		{
+			name:     "empty binary data",
+			data:     []byte{0x00, 0x00},
+			expected: []byte{},
+		},
+		{
+			name:      "insufficient length bytes",
+			data:      []byte{0x00},
+			expectErr: true,
+		},
+		{
+			name:      "incomplete binary data",
+			data:      []byte{0x00, 0x05, 0x01, 0x02},
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			val, n, err := readBinaryDataFromBytes(tt.data)
+			if tt.expectErr {
+				assert.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expected, val)
+				assert.Greater(t, n, 0)
+			}
+		})
+	}
+}
+
+func TestWriteTwoByteIntToBytes(t *testing.T) {
+	tests := []struct {
+		name      string
+		bufSize   int
+		value     uint16
+		expected  []byte
+		expectErr bool
+	}{
+		{
+			name:     "valid write",
+			bufSize:  3,
+			value:    0x1234,
+			expected: []byte{0x12, 0x34},
+		},
+		{
+			name:      "buffer too small",
+			bufSize:   1,
+			value:     0x1234,
+			expectErr: true,
+		},
+		{
+			name:      "zero buffer",
+			bufSize:   0,
+			value:     0x1234,
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := make([]byte, tt.bufSize)
+			n, err := writeTwoByteIntToBytes(buf, tt.value)
+			if tt.expectErr {
+				assert.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, 2, n)
+				assert.Equal(t, tt.expected, buf[:n])
+			}
+		})
+	}
+}
+
+func TestWriteFourByteIntToBytes(t *testing.T) {
+	tests := []struct {
+		name      string
+		bufSize   int
+		value     uint32
+		expected  []byte
+		expectErr bool
+	}{
+		{
+			name:     "valid write",
+			bufSize:  5,
+			value:    0x12345678,
+			expected: []byte{0x12, 0x34, 0x56, 0x78},
+		},
+		{
+			name:      "buffer too small - 3 bytes",
+			bufSize:   3,
+			value:     0x12345678,
+			expectErr: true,
+		},
+		{
+			name:      "buffer too small - 1 byte",
+			bufSize:   1,
+			value:     0x12345678,
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := make([]byte, tt.bufSize)
+			n, err := writeFourByteIntToBytes(buf, tt.value)
+			if tt.expectErr {
+				assert.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, 4, n)
+				assert.Equal(t, tt.expected, buf[:n])
+			}
+		})
+	}
+}
+
+func TestWriteUTF8StringToBytes(t *testing.T) {
+	tests := []struct {
+		name      string
+		bufSize   int
+		value     string
+		expectErr bool
+	}{
+		{
+			name:    "valid write",
+			bufSize: 10,
+			value:   "hello",
+		},
+		{
+			name:    "empty string",
+			bufSize: 2,
+			value:   "",
+		},
+		{
+			name:      "buffer too small",
+			bufSize:   3,
+			value:     "hello",
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := make([]byte, tt.bufSize)
+			n, err := writeUTF8StringToBytes(buf, tt.value)
+			if tt.expectErr {
+				assert.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, 2+len(tt.value), n)
+			}
+		})
+	}
+}
+
+func TestWriteUTF8PairToBytes(t *testing.T) {
+	tests := []struct {
+		name      string
+		bufSize   int
+		key       string
+		value     string
+		expectErr bool
+	}{
+		{
+			name:    "valid write",
+			bufSize: 20,
+			key:     "key",
+			value:   "value",
+		},
+		{
+			name:    "empty pair",
+			bufSize: 4,
+			key:     "",
+			value:   "",
+		},
+		{
+			name:      "buffer too small for key",
+			bufSize:   3,
+			key:       "key",
+			value:     "value",
+			expectErr: true,
+		},
+		{
+			name:      "buffer too small for value",
+			bufSize:   6,
+			key:       "key",
+			value:     "value",
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := make([]byte, tt.bufSize)
+			pair := UTF8Pair{Key: tt.key, Value: tt.value}
+			n, err := writeUTF8PairToBytes(buf, pair)
+			if tt.expectErr {
+				assert.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				expectedLen := 2 + len(tt.key) + 2 + len(tt.value)
+				assert.Equal(t, expectedLen, n)
+			}
+		})
+	}
+}
+
+func TestWriteBinaryDataToBytes(t *testing.T) {
+	tests := []struct {
+		name      string
+		bufSize   int
+		data      []byte
+		expectErr bool
+	}{
+		{
+			name:    "valid write",
+			bufSize: 10,
+			data:    []byte{0x01, 0x02, 0x03},
+		},
+		{
+			name:    "empty data",
+			bufSize: 2,
+			data:    []byte{},
+		},
+		{
+			name:      "buffer too small",
+			bufSize:   3,
+			data:      []byte{0x01, 0x02, 0x03},
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := make([]byte, tt.bufSize)
+			n, err := writeBinaryDataToBytes(buf, tt.data)
+			if tt.expectErr {
+				assert.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, 2+len(tt.data), n)
+			}
+		})
+	}
+}
+
+func TestReadByteFromBytes(t *testing.T) {
+	tests := []struct {
+		name      string
+		data      []byte
+		expected  byte
+		expectErr bool
+	}{
+		{
+			name:     "valid byte",
+			data:     []byte{0x42, 0xFF},
+			expected: 0x42,
+		},
+		{
+			name:      "empty data",
+			data:      []byte{},
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			val, n, err := readByteFromBytes(tt.data)
+			if tt.expectErr {
+				assert.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expected, val)
+				assert.Equal(t, 1, n)
+			}
+		})
+	}
+}
+
+func TestWriteByteToBytes_BufferTooSmall(t *testing.T) {
+	buf := make([]byte, 0)
+	n, err := writeByteToBytes(buf, 0x42)
+	assert.ErrorIs(t, err, ErrBufferTooSmall)
+	assert.Equal(t, 0, n)
+}
+
+func TestParsePropertiesFromBytes_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		{
+			name: "empty data",
+			data: []byte{},
+		},
+		{
+			name: "invalid property length",
+			data: []byte{0xFF},
+		},
+		{
+			name: "incomplete property",
+			data: []byte{0x02, 0x01},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, err := ParsePropertiesFromBytes(tt.data)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestEncodePropertiesToBytes_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name  string
+		props Properties
+		buf   []byte
+	}{
+		{
+			name: "buffer too small",
+			props: Properties{
+				Properties: []Property{
+					{ID: PropPayloadFormatIndicator, Value: byte(1)},
+				},
+			},
+			buf: make([]byte, 1),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := tt.props.EncodePropertiesToBytes(tt.buf)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestCalculateLength_AllTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		prop     Property
+		expected int
+	}{
+		{
+			name:     "byte property",
+			prop:     Property{ID: PropPayloadFormatIndicator, Value: byte(1)},
+			expected: 2,
+		},
+		{
+			name:     "two byte int",
+			prop:     Property{ID: PropServerKeepAlive, Value: uint16(60)},
+			expected: 3,
+		},
+		{
+			name:     "four byte int",
+			prop:     Property{ID: PropMessageExpiryInterval, Value: uint32(60)},
+			expected: 5,
+		},
+		{
+			name:     "UTF8 string",
+			prop:     Property{ID: PropContentType, Value: "test"},
+			expected: 7,
+		},
+		{
+			name:     "UTF8 pair",
+			prop:     Property{ID: PropUserProperty, Value: UTF8Pair{Key: "k", Value: "v"}},
+			expected: 7,
+		},
+		{
+			name:     "binary data",
+			prop:     Property{ID: PropCorrelationData, Value: []byte{0x01, 0x02}},
+			expected: 5,
+		},
+		{
+			name:     "varint",
+			prop:     Property{ID: PropSubscriptionIdentifier, Value: uint32(127)},
+			expected: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			props := &Properties{Properties: []Property{tt.prop}}
+			length := props.calculateLength()
+			assert.Equal(t, uint32(tt.expected), length)
+		})
+	}
+}
+
+func TestEncodePropertyToBytes_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name string
+		prop Property
+		buf  []byte
+	}{
+		{
+			name: "byte property buffer too small",
+			prop: Property{ID: PropPayloadFormatIndicator, Value: byte(1)},
+			buf:  make([]byte, 1),
+		},
+		{
+			name: "two byte int buffer too small",
+			prop: Property{ID: PropServerKeepAlive, Value: uint16(60)},
+			buf:  make([]byte, 2),
+		},
+		{
+			name: "four byte int buffer too small",
+			prop: Property{ID: PropMessageExpiryInterval, Value: uint32(60)},
+			buf:  make([]byte, 3),
+		},
+		{
+			name: "UTF8 string buffer too small",
+			prop: Property{ID: PropContentType, Value: "test"},
+			buf:  make([]byte, 3),
+		},
+		{
+			name: "binary data buffer too small",
+			prop: Property{ID: PropCorrelationData, Value: []byte{0x01, 0x02}},
+			buf:  make([]byte, 3),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := encodePropertyToBytes(tt.buf, &tt.prop)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestReadByte_Error(t *testing.T) {
+	r := bytes.NewReader([]byte{})
+	_, err := readByte(r)
+	assert.Error(t, err)
+}
+
+func TestReadTwoByteInt_Error(t *testing.T) {
+	r := bytes.NewReader([]byte{0x01})
+	_, err := readTwoByteInt(r)
+	assert.Error(t, err)
+}
+
+func TestReadFourByteInt_Error(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		{
+			name: "3 bytes",
+			data: []byte{0x01, 0x02, 0x03},
+		},
+		{
+			name: "0 bytes",
+			data: []byte{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := bytes.NewReader(tt.data)
+			_, err := readFourByteInt(r)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestReadUTF8String_Error(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		{
+			name: "incomplete length",
+			data: []byte{0x00},
+		},
+		{
+			name: "incomplete string",
+			data: []byte{0x00, 0x05, 'h', 'i'},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := bytes.NewReader(tt.data)
+			_, err := readUTF8String(r)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestReadUTF8Pair_Error(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		{
+			name: "incomplete key",
+			data: []byte{0x00, 0x05, 'k'},
+		},
+		{
+			name: "incomplete value",
+			data: []byte{0x00, 0x01, 'k', 0x00, 0x05, 'v'},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := bytes.NewReader(tt.data)
+			_, err := readUTF8Pair(r)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestReadBinaryData_Error(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		{
+			name: "incomplete length",
+			data: []byte{0x00},
+		},
+		{
+			name: "incomplete data",
+			data: []byte{0x00, 0x05, 0x01, 0x02},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := bytes.NewReader(tt.data)
+			_, err := readBinaryData(r)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestWriteUTF8String_EmptyString(t *testing.T) {
+	var buf bytes.Buffer
+	err := writeUTF8String(&buf, "")
+	require.NoError(t, err)
+	assert.Equal(t, []byte{0x00, 0x00}, buf.Bytes())
+}
+
+func TestWriteBinaryData_EmptyData(t *testing.T) {
+	var buf bytes.Buffer
+	err := writeBinaryData(&buf, []byte{})
+	require.NoError(t, err)
+	assert.Equal(t, []byte{0x00, 0x00}, buf.Bytes())
+}
+
+func TestEncodeProperties_EmptyProperties(t *testing.T) {
+	var buf bytes.Buffer
+	props := &Properties{}
+	err := props.EncodeProperties(&buf)
+	require.NoError(t, err)
+	assert.Equal(t, []byte{0x00}, buf.Bytes())
+}

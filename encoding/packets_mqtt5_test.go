@@ -611,3 +611,636 @@ func TestParseConnectPacket_ReservedBitSet(t *testing.T) {
 	_, err := ParseConnectPacket(r, fh)
 	assert.ErrorIs(t, err, ErrMalformedPacket)
 }
+
+func TestParsePubrecPacket(t *testing.T) {
+	tests := []struct {
+		name           string
+		data           []byte
+		remainingLen   uint32
+		expectedPktID  uint16
+		expectedReason ReasonCode
+	}{
+		{
+			name: "Minimal PUBREC",
+			data: []byte{
+				0x00, 0x01,
+			},
+			remainingLen:   2,
+			expectedPktID:  1,
+			expectedReason: ReasonSuccess,
+		},
+		{
+			name: "PUBREC with reason code",
+			data: []byte{
+				0x00, 0x02,
+				0x10,
+			},
+			remainingLen:   3,
+			expectedPktID:  2,
+			expectedReason: ReasonNoMatchingSubscribers,
+		},
+		{
+			name: "PUBREC with reason and properties",
+			data: []byte{
+				0x00, 0x03,
+				0x00,
+				0x00,
+			},
+			remainingLen:   4,
+			expectedPktID:  3,
+			expectedReason: ReasonSuccess,
+		},
+		{
+			name: "PUBREC with properties and reason string",
+			data: []byte{
+				0x00, 0x04,
+				0x00,
+				0x05, 0x1F, 0x00, 0x02, 'O', 'K',
+			},
+			remainingLen:   9,
+			expectedPktID:  4,
+			expectedReason: ReasonSuccess,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := bytes.NewReader(tt.data)
+			fh := &FixedHeader{
+				Type:            PUBREC,
+				RemainingLength: tt.remainingLen,
+			}
+
+			pkt, err := ParsePubrecPacket(r, fh)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedPktID, pkt.PacketID)
+			assert.Equal(t, tt.expectedReason, pkt.ReasonCode)
+		})
+	}
+}
+
+func TestParsePubrelPacket(t *testing.T) {
+	tests := []struct {
+		name           string
+		data           []byte
+		remainingLen   uint32
+		expectedPktID  uint16
+		expectedReason ReasonCode
+	}{
+		{
+			name: "Minimal PUBREL",
+			data: []byte{
+				0x00, 0x01,
+			},
+			remainingLen:   2,
+			expectedPktID:  1,
+			expectedReason: ReasonSuccess,
+		},
+		{
+			name: "PUBREL with reason code",
+			data: []byte{
+				0x00, 0x02,
+				0x92,
+			},
+			remainingLen:   3,
+			expectedPktID:  2,
+			expectedReason: ReasonPacketIdentifierNotFound,
+		},
+		{
+			name: "PUBREL with reason and properties",
+			data: []byte{
+				0x00, 0x03,
+				0x00,
+				0x00,
+			},
+			remainingLen:   4,
+			expectedPktID:  3,
+			expectedReason: ReasonSuccess,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := bytes.NewReader(tt.data)
+			fh := &FixedHeader{
+				Type:            PUBREL,
+				Flags:           0x02,
+				RemainingLength: tt.remainingLen,
+			}
+
+			pkt, err := ParsePubrelPacket(r, fh)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedPktID, pkt.PacketID)
+			assert.Equal(t, tt.expectedReason, pkt.ReasonCode)
+		})
+	}
+}
+
+func TestParsePubcompPacket(t *testing.T) {
+	tests := []struct {
+		name           string
+		data           []byte
+		remainingLen   uint32
+		expectedPktID  uint16
+		expectedReason ReasonCode
+	}{
+		{
+			name: "Minimal PUBCOMP",
+			data: []byte{
+				0x00, 0x01,
+			},
+			remainingLen:   2,
+			expectedPktID:  1,
+			expectedReason: ReasonSuccess,
+		},
+		{
+			name: "PUBCOMP with reason code",
+			data: []byte{
+				0x00, 0x02,
+				0x92,
+			},
+			remainingLen:   3,
+			expectedPktID:  2,
+			expectedReason: ReasonPacketIdentifierNotFound,
+		},
+		{
+			name: "PUBCOMP with reason and properties",
+			data: []byte{
+				0x00, 0x03,
+				0x00,
+				0x00,
+			},
+			remainingLen:   4,
+			expectedPktID:  3,
+			expectedReason: ReasonSuccess,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := bytes.NewReader(tt.data)
+			fh := &FixedHeader{
+				Type:            PUBCOMP,
+				RemainingLength: tt.remainingLen,
+			}
+
+			pkt, err := ParsePubcompPacket(r, fh)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedPktID, pkt.PacketID)
+			assert.Equal(t, tt.expectedReason, pkt.ReasonCode)
+		})
+	}
+}
+
+func TestParseConnackPacket_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		{
+			name: "EOF on flags",
+			data: []byte{},
+		},
+		{
+			name: "EOF on reason code",
+			data: []byte{0x00},
+		},
+		{
+			name: "EOF on properties",
+			data: []byte{0x00, 0x00},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := bytes.NewReader(tt.data)
+			fh := &FixedHeader{
+				Type:            CONNACK,
+				RemainingLength: uint32(len(tt.data)),
+			}
+
+			_, err := ParseConnackPacket(r, fh)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestParsePublishPacket_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+		qos  QoS
+	}{
+		{
+			name: "EOF on topic name",
+			data: []byte{0x00},
+			qos:  QoS0,
+		},
+		{
+			name: "EOF on packet ID",
+			data: []byte{0x00, 0x04, 't', 'e', 's', 't', 0x00},
+			qos:  QoS1,
+		},
+		{
+			name: "EOF on properties",
+			data: []byte{0x00, 0x04, 't', 'e', 's', 't', 0x00, 0x01},
+			qos:  QoS1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := bytes.NewReader(tt.data)
+			fh := &FixedHeader{
+				Type:            PUBLISH,
+				QoS:             tt.qos,
+				RemainingLength: uint32(len(tt.data)),
+			}
+
+			_, err := ParsePublishPacket(r, fh)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestParseSubscribePacket_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		{
+			name: "EOF on packet ID",
+			data: []byte{0x00},
+		},
+		{
+			name: "EOF on properties",
+			data: []byte{0x00, 0x01},
+		},
+		{
+			name: "EOF on topic filter",
+			data: []byte{0x00, 0x01, 0x00},
+		},
+		{
+			name: "EOF on options",
+			data: []byte{0x00, 0x01, 0x00, 0x00, 0x04, 't', 'e', 's', 't'},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := bytes.NewReader(tt.data)
+			fh := &FixedHeader{
+				Type:            SUBSCRIBE,
+				Flags:           0x02,
+				RemainingLength: uint32(len(tt.data)),
+			}
+
+			_, err := ParseSubscribePacket(r, fh)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestParseSubackPacket_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		{
+			name: "EOF on packet ID",
+			data: []byte{0x00},
+		},
+		{
+			name: "EOF on properties",
+			data: []byte{0x00, 0x01},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := bytes.NewReader(tt.data)
+			fh := &FixedHeader{
+				Type:            SUBACK,
+				RemainingLength: uint32(len(tt.data)),
+			}
+
+			_, err := ParseSubackPacket(r, fh)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestParseUnsubscribePacket_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		{
+			name: "EOF on packet ID",
+			data: []byte{0x00},
+		},
+		{
+			name: "EOF on properties",
+			data: []byte{0x00, 0x01},
+		},
+		{
+			name: "EOF on topic filter",
+			data: []byte{0x00, 0x01, 0x00, 0x00},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := bytes.NewReader(tt.data)
+			fh := &FixedHeader{
+				Type:            UNSUBSCRIBE,
+				Flags:           0x02,
+				RemainingLength: uint32(len(tt.data)),
+			}
+
+			_, err := ParseUnsubscribePacket(r, fh)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestParseUnsubackPacket_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		{
+			name: "EOF on packet ID",
+			data: []byte{0x00},
+		},
+		{
+			name: "EOF on properties",
+			data: []byte{0x00, 0x01},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := bytes.NewReader(tt.data)
+			fh := &FixedHeader{
+				Type:            UNSUBACK,
+				RemainingLength: uint32(len(tt.data)),
+			}
+
+			_, err := ParseUnsubackPacket(r, fh)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestParseDisconnectPacket_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+		rlen uint32
+	}{
+		{
+			name: "EOF on properties",
+			data: []byte{0x00},
+			rlen: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := bytes.NewReader(tt.data)
+			fh := &FixedHeader{
+				Type:            DISCONNECT,
+				RemainingLength: tt.rlen,
+			}
+
+			_, err := ParseDisconnectPacket(r, fh)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestParseAuthPacket_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+		rlen uint32
+	}{
+		{
+			name: "EOF on properties",
+			data: []byte{0x18},
+			rlen: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := bytes.NewReader(tt.data)
+			fh := &FixedHeader{
+				Type:            AUTH,
+				RemainingLength: tt.rlen,
+			}
+
+			_, err := ParseAuthPacket(r, fh)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestParsePingrespPacket_InvalidRemainingLength(t *testing.T) {
+	fh := &FixedHeader{
+		Type:            PINGRESP,
+		RemainingLength: 1,
+	}
+
+	_, err := ParsePingrespPacket(fh)
+	assert.ErrorIs(t, err, ErrMalformedPacket)
+}
+
+func TestEncodeVariableByteIntegerMust(t *testing.T) {
+	tests := []struct {
+		name  string
+		value uint32
+		panic bool
+	}{
+		{
+			name:  "valid value",
+			value: 127,
+			panic: false,
+		},
+		{
+			name:  "max valid value",
+			value: 268435455,
+			panic: false,
+		},
+		{
+			name:  "invalid value",
+			value: 268435456,
+			panic: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.panic {
+				assert.Panics(t, func() {
+					EncodeVariableByteIntegerMust(tt.value)
+				})
+			} else {
+				assert.NotPanics(t, func() {
+					result := EncodeVariableByteIntegerMust(tt.value)
+					assert.NotNil(t, result)
+				})
+			}
+		})
+	}
+}
+
+func TestParsePubackPacket_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+		rlen uint32
+	}{
+		{
+			name: "EOF on packet ID",
+			data: []byte{0x00},
+			rlen: 2,
+		},
+		{
+			name: "EOF on reason code",
+			data: []byte{0x00, 0x01},
+			rlen: 3,
+		},
+		{
+			name: "EOF on properties",
+			data: []byte{0x00, 0x01, 0x00},
+			rlen: 4,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := bytes.NewReader(tt.data)
+			fh := &FixedHeader{
+				Type:            PUBACK,
+				RemainingLength: tt.rlen,
+			}
+
+			_, err := ParsePubackPacket(r, fh)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestParsePubrecPacket_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+		rlen uint32
+	}{
+		{
+			name: "EOF on packet ID",
+			data: []byte{0x00},
+			rlen: 2,
+		},
+		{
+			name: "EOF on reason code",
+			data: []byte{0x00, 0x01},
+			rlen: 3,
+		},
+		{
+			name: "EOF on properties",
+			data: []byte{0x00, 0x01, 0x00},
+			rlen: 4,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := bytes.NewReader(tt.data)
+			fh := &FixedHeader{
+				Type:            PUBREC,
+				RemainingLength: tt.rlen,
+			}
+
+			_, err := ParsePubrecPacket(r, fh)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestParsePubrelPacket_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+		rlen uint32
+	}{
+		{
+			name: "EOF on packet ID",
+			data: []byte{0x00},
+			rlen: 2,
+		},
+		{
+			name: "EOF on reason code",
+			data: []byte{0x00, 0x01},
+			rlen: 3,
+		},
+		{
+			name: "EOF on properties",
+			data: []byte{0x00, 0x01, 0x00},
+			rlen: 4,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := bytes.NewReader(tt.data)
+			fh := &FixedHeader{
+				Type:            PUBREL,
+				Flags:           0x02,
+				RemainingLength: tt.rlen,
+			}
+
+			_, err := ParsePubrelPacket(r, fh)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestParsePubcompPacket_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+		rlen uint32
+	}{
+		{
+			name: "EOF on packet ID",
+			data: []byte{0x00},
+			rlen: 2,
+		},
+		{
+			name: "EOF on reason code",
+			data: []byte{0x00, 0x01},
+			rlen: 3,
+		},
+		{
+			name: "EOF on properties",
+			data: []byte{0x00, 0x01, 0x00},
+			rlen: 4,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := bytes.NewReader(tt.data)
+			fh := &FixedHeader{
+				Type:            PUBCOMP,
+				RemainingLength: tt.rlen,
+			}
+
+			_, err := ParsePubcompPacket(r, fh)
+			assert.Error(t, err)
+		})
+	}
+}

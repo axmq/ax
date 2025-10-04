@@ -539,3 +539,351 @@ func TestEOFHandling(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateFlags(t *testing.T) {
+	tests := []struct {
+		name       string
+		packetType PacketType
+		flags      byte
+		expectErr  bool
+	}{
+		{
+			name:       "CONNECT valid flags",
+			packetType: CONNECT,
+			flags:      0x00,
+			expectErr:  false,
+		},
+		{
+			name:       "CONNECT invalid flags",
+			packetType: CONNECT,
+			flags:      0x01,
+			expectErr:  true,
+		},
+		{
+			name:       "CONNACK valid flags",
+			packetType: CONNACK,
+			flags:      0x00,
+			expectErr:  false,
+		},
+		{
+			name:       "CONNACK invalid flags",
+			packetType: CONNACK,
+			flags:      0x01,
+			expectErr:  true,
+		},
+		{
+			name:       "PUBREL valid flags",
+			packetType: PUBREL,
+			flags:      0x02,
+			expectErr:  false,
+		},
+		{
+			name:       "PUBREL invalid flags",
+			packetType: PUBREL,
+			flags:      0x00,
+			expectErr:  true,
+		},
+		{
+			name:       "SUBSCRIBE valid flags",
+			packetType: SUBSCRIBE,
+			flags:      0x02,
+			expectErr:  false,
+		},
+		{
+			name:       "SUBSCRIBE invalid flags",
+			packetType: SUBSCRIBE,
+			flags:      0x00,
+			expectErr:  true,
+		},
+		{
+			name:       "UNSUBSCRIBE valid flags",
+			packetType: UNSUBSCRIBE,
+			flags:      0x02,
+			expectErr:  false,
+		},
+		{
+			name:       "UNSUBSCRIBE invalid flags",
+			packetType: UNSUBSCRIBE,
+			flags:      0x01,
+			expectErr:  true,
+		},
+		{
+			name:       "PUBACK valid flags",
+			packetType: PUBACK,
+			flags:      0x00,
+			expectErr:  false,
+		},
+		{
+			name:       "PUBACK invalid flags",
+			packetType: PUBACK,
+			flags:      0x03,
+			expectErr:  true,
+		},
+		{
+			name:       "PUBREC valid flags",
+			packetType: PUBREC,
+			flags:      0x00,
+			expectErr:  false,
+		},
+		{
+			name:       "PUBREC invalid flags",
+			packetType: PUBREC,
+			flags:      0x01,
+			expectErr:  true,
+		},
+		{
+			name:       "PUBCOMP valid flags",
+			packetType: PUBCOMP,
+			flags:      0x00,
+			expectErr:  false,
+		},
+		{
+			name:       "PUBCOMP invalid flags",
+			packetType: PUBCOMP,
+			flags:      0x02,
+			expectErr:  true,
+		},
+		{
+			name:       "SUBACK valid flags",
+			packetType: SUBACK,
+			flags:      0x00,
+			expectErr:  false,
+		},
+		{
+			name:       "SUBACK invalid flags",
+			packetType: SUBACK,
+			flags:      0x01,
+			expectErr:  true,
+		},
+		{
+			name:       "UNSUBACK valid flags",
+			packetType: UNSUBACK,
+			flags:      0x00,
+			expectErr:  false,
+		},
+		{
+			name:       "UNSUBACK invalid flags",
+			packetType: UNSUBACK,
+			flags:      0x02,
+			expectErr:  true,
+		},
+		{
+			name:       "PINGREQ valid flags",
+			packetType: PINGREQ,
+			flags:      0x00,
+			expectErr:  false,
+		},
+		{
+			name:       "PINGREQ invalid flags",
+			packetType: PINGREQ,
+			flags:      0x01,
+			expectErr:  true,
+		},
+		{
+			name:       "PINGRESP valid flags",
+			packetType: PINGRESP,
+			flags:      0x00,
+			expectErr:  false,
+		},
+		{
+			name:       "PINGRESP invalid flags",
+			packetType: PINGRESP,
+			flags:      0x01,
+			expectErr:  true,
+		},
+		{
+			name:       "DISCONNECT valid flags",
+			packetType: DISCONNECT,
+			flags:      0x00,
+			expectErr:  false,
+		},
+		{
+			name:       "DISCONNECT invalid flags",
+			packetType: DISCONNECT,
+			flags:      0x02,
+			expectErr:  true,
+		},
+		{
+			name:       "AUTH valid flags",
+			packetType: AUTH,
+			flags:      0x00,
+			expectErr:  false,
+		},
+		{
+			name:       "AUTH invalid flags",
+			packetType: AUTH,
+			flags:      0x01,
+			expectErr:  true,
+		},
+		{
+			name:       "PUBLISH allows any flags",
+			packetType: PUBLISH,
+			flags:      0x0D,
+			expectErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateFlags(tt.packetType, tt.flags)
+			if tt.expectErr {
+				assert.ErrorIs(t, err, ErrInvalidFlags)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestParseConnectPacket_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name      string
+		data      []byte
+		expectErr bool
+	}{
+		{
+			name:      "EOF on protocol name",
+			data:      []byte{0x00},
+			expectErr: true,
+		},
+		{
+			name:      "EOF on protocol version",
+			data:      []byte{0x00, 0x04, 'M', 'Q', 'T', 'T'},
+			expectErr: true,
+		},
+		{
+			name:      "EOF on connect flags",
+			data:      []byte{0x00, 0x04, 'M', 'Q', 'T', 'T', 0x05},
+			expectErr: true,
+		},
+		{
+			name:      "EOF on keep alive",
+			data:      []byte{0x00, 0x04, 'M', 'Q', 'T', 'T', 0x05, 0x02, 0x00},
+			expectErr: true,
+		},
+		{
+			name:      "EOF on properties",
+			data:      []byte{0x00, 0x04, 'M', 'Q', 'T', 'T', 0x05, 0x02, 0x00, 0x3C},
+			expectErr: true,
+		},
+		{
+			name:      "EOF on client ID",
+			data:      []byte{0x00, 0x04, 'M', 'Q', 'T', 'T', 0x05, 0x02, 0x00, 0x3C, 0x00},
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := bytes.NewReader(tt.data)
+			fh := &FixedHeader{
+				Type:            CONNECT,
+				RemainingLength: uint32(len(tt.data)),
+			}
+
+			_, err := ParseConnectPacket(r, fh)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestParseConnectPacket_WillErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		{
+			name: "EOF on will properties",
+			data: []byte{
+				0x00, 0x04, 'M', 'Q', 'T', 'T',
+				0x05,
+				0x04,
+				0x00, 0x3C,
+				0x00,
+				0x00, 0x06, 'c', 'l', 'i', 'e', 'n', 't',
+			},
+		},
+		{
+			name: "EOF on will topic",
+			data: []byte{
+				0x00, 0x04, 'M', 'Q', 'T', 'T',
+				0x05,
+				0x04,
+				0x00, 0x3C,
+				0x00,
+				0x00, 0x06, 'c', 'l', 'i', 'e', 'n', 't',
+				0x00,
+			},
+		},
+		{
+			name: "EOF on will payload",
+			data: []byte{
+				0x00, 0x04, 'M', 'Q', 'T', 'T',
+				0x05,
+				0x04,
+				0x00, 0x3C,
+				0x00,
+				0x00, 0x06, 'c', 'l', 'i', 'e', 'n', 't',
+				0x00,
+				0x00, 0x04, 'w', 'i', 'l', 'l',
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := bytes.NewReader(tt.data)
+			fh := &FixedHeader{
+				Type:            CONNECT,
+				RemainingLength: uint32(len(tt.data)),
+			}
+
+			_, err := ParseConnectPacket(r, fh)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestParseConnectPacket_UsernamePasswordErrors(t *testing.T) {
+	tests := []struct {
+		name string
+		data []byte
+	}{
+		{
+			name: "EOF on username",
+			data: []byte{
+				0x00, 0x04, 'M', 'Q', 'T', 'T',
+				0x05,
+				0x80,
+				0x00, 0x3C,
+				0x00,
+				0x00, 0x06, 'c', 'l', 'i', 'e', 'n', 't',
+			},
+		},
+		{
+			name: "EOF on password",
+			data: []byte{
+				0x00, 0x04, 'M', 'Q', 'T', 'T',
+				0x05,
+				0xC0,
+				0x00, 0x3C,
+				0x00,
+				0x00, 0x06, 'c', 'l', 'i', 'e', 'n', 't',
+				0x00, 0x04, 'u', 's', 'e', 'r',
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := bytes.NewReader(tt.data)
+			fh := &FixedHeader{
+				Type:            CONNECT,
+				RemainingLength: uint32(len(tt.data)),
+			}
+
+			_, err := ParseConnectPacket(r, fh)
+			assert.Error(t, err)
+		})
+	}
+}
