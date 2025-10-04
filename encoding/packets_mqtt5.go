@@ -591,6 +591,11 @@ func ParseSubscribePacket(r io.Reader, fh *FixedHeader) (*SubscribePacket, error
 		pkt.Subscriptions = append(pkt.Subscriptions, sub)
 	}
 
+	// SUBSCRIBE packet must contain at least one subscription
+	if len(pkt.Subscriptions) == 0 {
+		return nil, ErrMalformedPacket
+	}
+
 	return pkt, nil
 }
 
