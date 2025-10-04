@@ -8,22 +8,38 @@ import (
 type PacketType byte
 
 const (
-	Reserved    PacketType = 0
-	CONNECT     PacketType = 1
-	CONNACK     PacketType = 2
-	PUBLISH     PacketType = 3
-	PUBACK      PacketType = 4
-	PUBREC      PacketType = 5
-	PUBREL      PacketType = 6
-	PUBCOMP     PacketType = 7
-	SUBSCRIBE   PacketType = 8
-	SUBACK      PacketType = 9
+	// Reserved control packet type reserved by the spec; receiving this is a protocol error.
+	Reserved PacketType = 0
+	// CONNECT client→server request to establish a connection; first packet a client sends.
+	CONNECT PacketType = 1
+	// CONNACK server→client acknowledgment of CONNECT; conveys session state and reason code.
+	CONNACK PacketType = 2
+	// PUBLISH application message transport; flags encode DUP, QoS, and RETAIN.
+	PUBLISH PacketType = 3
+	// PUBACK QoS 1 publish acknowledgment; completes the QoS 1 flow.
+	PUBACK PacketType = 4
+	// PUBREC QoS 2 publish received; step 1 acknowledging PUBLISH.
+	PUBREC PacketType = 5
+	// PUBREL QoS 2 publish release; step 2. Must be sent with flags 0010.
+	PUBREL PacketType = 6
+	// PUBCOMP QoS 2 publish complete; final step completing QoS 2 handshake.
+	PUBCOMP PacketType = 7
+	// SUBSCRIBE client→server request to add topic filters. Must be sent with flags 0010.
+	SUBSCRIBE PacketType = 8
+	// SUBACK server→client acknowledgment of SUBSCRIBE; returns per-subscription reason codes.
+	SUBACK PacketType = 9
+	// UNSUBSCRIBE client→server request to remove topic filters. Must be sent with flags 0010.
 	UNSUBSCRIBE PacketType = 10
-	UNSUBACK    PacketType = 11
-	PINGREQ     PacketType = 12
-	PINGRESP    PacketType = 13
-	DISCONNECT  PacketType = 14
-	AUTH        PacketType = 15
+	// UNSUBACK server→client acknowledgment of UNSUBSCRIBE; may include reason codes (MQTT 5.0).
+	UNSUBACK PacketType = 11
+	// PINGREQ client→server ping to test the network and keep the connection alive.
+	PINGREQ PacketType = 12
+	// PINGRESP server→client response to PINGREQ.
+	PINGRESP PacketType = 13
+	// DISCONNECT indicates disconnection; may carry reason code and session expiry (MQTT 5.0).
+	DISCONNECT PacketType = 14
+	// AUTH authentication exchange for enhanced authentication mechanisms (MQTT 5.0).
+	AUTH PacketType = 15
 )
 
 // QoS levels
