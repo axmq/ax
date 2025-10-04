@@ -22,6 +22,11 @@ const (
 
 	// MaxVariableByteIntegerBytes is the maximum number of bytes in a variable byte integer
 	MaxVariableByteIntegerBytes = 4
+
+	// maxMultiplierBeforeOverflow is the maximum multiplier value before the next iteration would overflow.
+	// This is MaxVariableByteInteger / 128, which equals 2,097,151 (or 128*128*128).
+	// Used to detect malformed variable byte integers during decoding.
+	maxMultiplierBeforeOverflow = MaxVariableByteInteger / 128
 )
 
 // EncodeVariableByteInteger encodes a uint32 as MQTT Variable Byte Integer.
@@ -128,7 +133,7 @@ func DecodeVariableByteInteger(r io.Reader) (uint32, error) {
 
 		// Check for maximum value exceeded (268,435,455)
 		// This check prevents overflow on the next iteration
-		if multiplier > 128*128*128 {
+		if multiplier > maxMultiplierBeforeOverflow {
 			return 0, ErrMalformedVariableByteInteger
 		}
 
@@ -159,7 +164,7 @@ func DecodeVariableByteIntegerFromBytes(data []byte) (uint32, int, error) {
 		}
 
 		// Check for maximum value exceeded
-		if multiplier > 128*128*128 {
+		if multiplier > maxMultiplierBeforeOverflow {
 			return 0, 0, ErrMalformedVariableByteInteger
 		}
 
