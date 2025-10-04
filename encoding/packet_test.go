@@ -1,4 +1,4 @@
-package packet
+package encoding
 
 import (
 	"bytes"
@@ -13,7 +13,7 @@ func TestParseFixedHeader_ValidPackets(t *testing.T) {
 	tests := []struct {
 		name           string
 		input          []byte
-		expectedType   Type
+		expectedType   PacketType
 		expectedFlags  byte
 		expectedRemLen uint32
 		expectedDUP    bool
@@ -301,7 +301,7 @@ func TestParseFixedHeader_InvalidPackets(t *testing.T) {
 		{
 			name:        "Malformed remaining length - 5 bytes",
 			input:       []byte{0x10, 0x80, 0x80, 0x80, 0x80, 0x01},
-			expectedErr: ErrMalformedRemainingLen,
+			expectedErr: ErrMalformedVariableByteInteger,
 		},
 		{
 			name:        "Incomplete variable byte integer",
@@ -329,7 +329,7 @@ func TestParseFixedHeaderFromBytes(t *testing.T) {
 	tests := []struct {
 		name              string
 		input             []byte
-		expectedType      Type
+		expectedType      PacketType
 		expectedRemLen    uint32
 		expectedBytesRead int
 		expectError       bool
@@ -400,83 +400,9 @@ func TestParseFixedHeaderFromBytes(t *testing.T) {
 	}
 }
 
-func TestEncodeVariableByteInteger(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    uint32
-		expected []byte
-		wantErr  bool
-	}{
-		{
-			name:     "0",
-			input:    0,
-			expected: []byte{0x00},
-		},
-		{
-			name:     "127",
-			input:    127,
-			expected: []byte{0x7F},
-		},
-		{
-			name:     "128",
-			input:    128,
-			expected: []byte{0x80, 0x01},
-		},
-		{
-			name:     "16383",
-			input:    16383,
-			expected: []byte{0xFF, 0x7F},
-		},
-		{
-			name:     "16384",
-			input:    16384,
-			expected: []byte{0x80, 0x80, 0x01},
-		},
-		{
-			name:     "2097151",
-			input:    2097151,
-			expected: []byte{0xFF, 0xFF, 0x7F},
-		},
-		{
-			name:     "2097152",
-			input:    2097152,
-			expected: []byte{0x80, 0x80, 0x80, 0x01},
-		},
-		{
-			name:     "268435455 (max)",
-			input:    268435455,
-			expected: []byte{0xFF, 0xFF, 0xFF, 0x7F},
-		},
-		{
-			name:    "268435456 (too large)",
-			input:   268435456,
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := EncodeVariableByteInteger(tt.input)
-
-			if tt.wantErr {
-				require.Error(t, err)
-				return
-			}
-
-			require.NoError(t, err)
-			assert.Equal(t, tt.expected, result)
-
-			decoded, bytesRead, err := decodeVariableByteIntegerFromBytes(result)
-			require.NoError(t, err)
-			assert.Equal(t, tt.input, decoded)
-			assert.Equal(t, len(result), bytesRead)
-		})
-	}
-}
-
 func TestTypeString(t *testing.T) {
 	tests := []struct {
-		typ      Type
+		typ      PacketType
 		expected string
 	}{
 		{Reserved, "RESERVED"},
@@ -495,8 +421,8 @@ func TestTypeString(t *testing.T) {
 		{PINGRESP, "PINGRESP"},
 		{DISCONNECT, "DISCONNECT"},
 		{AUTH, "AUTH"},
-		{Type(16), "UNKNOWN"},
-		{Type(255), "UNKNOWN"},
+		{PacketType(16), "UNKNOWN"},
+		{PacketType(255), "UNKNOWN"},
 	}
 
 	for _, tt := range tests {
