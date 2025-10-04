@@ -69,6 +69,12 @@ func EncodeVariableByteIntegerTo(buf []byte, offset int, value uint32) (int, err
 		return 0, ErrVariableByteIntegerTooLarge
 	}
 
+	// Preflight size check to ensure atomic operation
+	size := SizeVariableByteInteger(value)
+	if offset+size > len(buf) {
+		return 0, ErrBufferTooSmall
+	}
+
 	bytesWritten := 0
 	for {
 		encodedByte := byte(value % 128)
@@ -77,10 +83,6 @@ func EncodeVariableByteIntegerTo(buf []byte, offset int, value uint32) (int, err
 		// If there are more data to encode, set the top bit
 		if value > 0 {
 			encodedByte |= 0x80
-		}
-
-		if offset+bytesWritten >= len(buf) {
-			return 0, ErrBufferTooSmall
 		}
 
 		buf[offset+bytesWritten] = encodedByte
