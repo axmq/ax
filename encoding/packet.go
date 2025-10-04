@@ -1,29 +1,29 @@
-package packet
+package encoding
 
 import (
 	"io"
 )
 
-// Type represents MQTT control packet types
-type Type byte
+// PacketType represents MQTT control packet types
+type PacketType byte
 
 const (
-	Reserved    Type = 0
-	CONNECT     Type = 1
-	CONNACK     Type = 2
-	PUBLISH     Type = 3
-	PUBACK      Type = 4
-	PUBREC      Type = 5
-	PUBREL      Type = 6
-	PUBCOMP     Type = 7
-	SUBSCRIBE   Type = 8
-	SUBACK      Type = 9
-	UNSUBSCRIBE Type = 10
-	UNSUBACK    Type = 11
-	PINGREQ     Type = 12
-	PINGRESP    Type = 13
-	DISCONNECT  Type = 14
-	AUTH        Type = 15
+	Reserved    PacketType = 0
+	CONNECT     PacketType = 1
+	CONNACK     PacketType = 2
+	PUBLISH     PacketType = 3
+	PUBACK      PacketType = 4
+	PUBREC      PacketType = 5
+	PUBREL      PacketType = 6
+	PUBCOMP     PacketType = 7
+	SUBSCRIBE   PacketType = 8
+	SUBACK      PacketType = 9
+	UNSUBSCRIBE PacketType = 10
+	UNSUBACK    PacketType = 11
+	PINGREQ     PacketType = 12
+	PINGRESP    PacketType = 13
+	DISCONNECT  PacketType = 14
+	AUTH        PacketType = 15
 )
 
 // QoS levels
@@ -42,7 +42,7 @@ func (q QoS) IsValid() bool {
 
 // FixedHeader represents the MQTT fixed header
 type FixedHeader struct {
-	Type            Type
+	Type            PacketType
 	Flags           byte
 	RemainingLength uint32
 
@@ -67,7 +67,7 @@ func ParseFixedHeader(r io.Reader) (*FixedHeader, error) {
 	}
 
 	// Extract packet type (bits 7-4)
-	header.Type = Type(firstByte[0] >> 4)
+	header.Type = PacketType(firstByte[0] >> 4)
 
 	// Validate packet type - Reserved (0) is invalid per MQTT spec
 	if header.Type == Reserved {
@@ -98,7 +98,7 @@ func ParseFixedHeader(r io.Reader) (*FixedHeader, error) {
 	}
 
 	// Parse remaining length (Variable Byte Integer)
-	remainingLength, err := decodeVariableByteInteger(r)
+	remainingLength, err := DecodeVariableByteInteger(r)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +118,7 @@ func ParseFixedHeaderFromBytes(data []byte) (*FixedHeader, int, error) {
 	offset := 0
 
 	// Extract packet type (bits 7-4)
-	header.Type = Type(data[offset] >> 4)
+	header.Type = PacketType(data[offset] >> 4)
 
 	// Validate packet type
 	if header.Type == Reserved {
@@ -150,7 +150,7 @@ func ParseFixedHeaderFromBytes(data []byte) (*FixedHeader, int, error) {
 	}
 
 	// Parse remaining length (Variable Byte Integer)
-	remainingLength, bytesRead, err := decodeVariableByteIntegerFromBytes(data[offset:])
+	remainingLength, bytesRead, err := DecodeVariableByteIntegerFromBytes(data[offset:])
 	if err != nil {
 		return nil, 0, err
 	}
@@ -160,107 +160,10 @@ func ParseFixedHeaderFromBytes(data []byte) (*FixedHeader, int, error) {
 	return header, offset, nil
 }
 
-// decodeVariableByteInteger decodes MQTT Variable Byte Integer from a reader
-// Maximum of 4 bytes, each byte encodes 7 bits of data
-func decodeVariableByteInteger(r io.Reader) (uint32, error) {
-	var value uint32
-	var multiplier uint32 = 1
-	var buf [1]byte // Stack-allocated for zero heap allocation
-
-	for i := 0; i < 4; i++ {
-		if _, err := io.ReadFull(r, buf[:]); err != nil {
-			if err == io.EOF {
-				return 0, ErrUnexpectedEOF
-			}
-			return 0, err
-		}
-
-		encodedByte := buf[0]
-
-		// Add lower 7 bits to value
-		value += uint32(encodedByte&0x7F) * multiplier
-
-		// Check if more bytes follow (bit 7 is continuation bit)
-		if (encodedByte & 0x80) == 0 {
-			return value, nil
-		}
-
-		// Check for maximum value exceeded (268,435,455)
-		if multiplier > 128*128*128 {
-			return 0, ErrMalformedRemainingLen
-		}
-
-		multiplier *= 128
-	}
-
-	// If we read 4 bytes and still have continuation bit, it's malformed
-	return 0, ErrMalformedRemainingLen
-}
-
-// decodeVariableByteIntegerFromBytes decodes MQTT Variable Byte Integer from a byte slice
-// Returns the decoded value, number of bytes consumed, and any error
-func decodeVariableByteIntegerFromBytes(data []byte) (uint32, int, error) {
-	var value uint32
-	var multiplier uint32 = 1
-
-	for i := 0; i < 4 && i < len(data); i++ {
-		encodedByte := data[i]
-
-		// Add lower 7 bits to value
-		value += uint32(encodedByte&0x7F) * multiplier
-
-		// Check if more bytes follow (bit 7 is continuation bit)
-		if (encodedByte & 0x80) == 0 {
-			return value, i + 1, nil
-		}
-
-		// Check for maximum value exceeded
-		if multiplier > 128*128*128 {
-			return 0, 0, ErrMalformedRemainingLen
-		}
-
-		multiplier *= 128
-	}
-
-	// Either ran out of data or read 4 bytes with continuation bit still set
-	if len(data) < 4 {
-		return 0, 0, ErrUnexpectedEOF
-	}
-	return 0, 0, ErrMalformedRemainingLen
-}
-
-// EncodeVariableByteInteger encodes a uint32 as MQTT Variable Byte Integer
-// Returns the encoded bytes and any error
-func EncodeVariableByteInteger(value uint32) ([]byte, error) {
-	// Maximum value is 268,435,455 (0x0FFFFFFF)
-	if value > 268435455 {
-		return nil, ErrMalformedRemainingLen
-	}
-
-	result := make([]byte, 0, 4)
-	for {
-		encodedByte := byte(value % 128)
-		value = value / 128
-
-		// If there are more data to encode, set the top bit
-		if value > 0 {
-			encodedByte |= 0x80
-		}
-
-		result = append(result, encodedByte)
-
-		if value == 0 {
-			break
-		}
-	}
-
-	return result, nil
-}
-
 // validateFlags checks if flags are valid for the given packet type
 // Per MQTT 5.0 specification section 2.1.3
-func validateFlags(tp Type, flags byte) error {
-	expectedFlags := map[Type]byte{
+func validateFlags(tp PacketType, flags byte) error {
+	expectedFlags := map[PacketType]byte{
 		CONNECT:     0x00,
 		CONNACK:     0x00,
 		PUBACK:      0x00,
@@ -287,7 +190,7 @@ func validateFlags(tp Type, flags byte) error {
 }
 
 // String returns human-readable packet type name
-func (t Type) String() string {
+func (t PacketType) String() string {
 	names := [16]string{
 		Reserved:    "RESERVED",
 		CONNECT:     "CONNECT",
