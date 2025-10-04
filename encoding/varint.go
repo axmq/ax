@@ -1,6 +1,7 @@
 package encoding
 
 import (
+	"errors"
 	"io"
 )
 
@@ -107,7 +108,7 @@ func DecodeVariableByteInteger(r io.Reader) (uint32, error) {
 
 	for i := 0; i < MaxVariableByteIntegerBytes; i++ {
 		if _, err := io.ReadFull(r, buf[:]); err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 				return 0, ErrUnexpectedEOF
 			}
 			return 0, err
