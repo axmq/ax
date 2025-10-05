@@ -3,6 +3,8 @@ package network
 import (
 	"fmt"
 	"net"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -112,9 +114,9 @@ func TestListenerMultipleConnections(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, listener)
 
-	connCount := 0
+	var connCount int32
 	listener.OnConnection(func(conn *Connection) error {
-		connCount++
+		atomic.AddInt32(&connCount, 1)
 		return nil
 	})
 
@@ -309,16 +311,21 @@ func TestListenerMultipleHandlers(t *testing.T) {
 	listener, err := NewListener(config, nil)
 	require.NoError(t, err)
 
+	var mu sync.Mutex
 	handler1Called := false
 	handler2Called := false
 
 	listener.OnConnection(func(conn *Connection) error {
+		mu.Lock()
 		handler1Called = true
+		mu.Unlock()
 		return nil
 	})
 
 	listener.OnConnection(func(conn *Connection) error {
+		mu.Lock()
 		handler2Called = true
+		mu.Unlock()
 		return nil
 	})
 
@@ -334,8 +341,10 @@ func TestListenerMultipleHandlers(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
+	mu.Lock()
 	assert.True(t, handler1Called)
 	assert.True(t, handler2Called)
+	mu.Unlock()
 }
 
 func TestListenerWithCustomPool(t *testing.T) {
