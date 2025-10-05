@@ -219,7 +219,6 @@ func (r *Reconnector) Connect() (*Connection, error) {
 		conn, err = r.connectFn()
 		return err
 	})
-
 	if err != nil {
 		return nil, err
 	}

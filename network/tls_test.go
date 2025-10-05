@@ -181,9 +181,9 @@ func TestTLSConfigBuildWithValidCerts(t *testing.T) {
 	certPEM, keyPEM, err := generateTestCertificate()
 	require.NoError(t, err)
 
-	err = os.WriteFile(certFile, certPEM, 0600)
+	err = os.WriteFile(certFile, certPEM, 0o600)
 	require.NoError(t, err)
-	err = os.WriteFile(keyFile, keyPEM, 0600)
+	err = os.WriteFile(keyFile, keyPEM, 0o600)
 	require.NoError(t, err)
 
 	config := &TLSConfig{
@@ -209,11 +209,11 @@ func TestTLSConfigBuildWithCA(t *testing.T) {
 	certPEM, keyPEM, err := generateTestCertificate()
 	require.NoError(t, err)
 
-	err = os.WriteFile(certFile, certPEM, 0600)
+	err = os.WriteFile(certFile, certPEM, 0o600)
 	require.NoError(t, err)
-	err = os.WriteFile(keyFile, keyPEM, 0600)
+	err = os.WriteFile(keyFile, keyPEM, 0o600)
 	require.NoError(t, err)
-	err = os.WriteFile(caFile, certPEM, 0600)
+	err = os.WriteFile(caFile, certPEM, 0o600)
 	require.NoError(t, err)
 
 	config := &TLSConfig{
@@ -247,9 +247,9 @@ func TestTLSConfigBuildInvalidCAFile(t *testing.T) {
 	certPEM, keyPEM, err := generateTestCertificate()
 	require.NoError(t, err)
 
-	err = os.WriteFile(certFile, certPEM, 0600)
+	err = os.WriteFile(certFile, certPEM, 0o600)
 	require.NoError(t, err)
-	err = os.WriteFile(keyFile, keyPEM, 0600)
+	err = os.WriteFile(keyFile, keyPEM, 0o600)
 	require.NoError(t, err)
 
 	config := &TLSConfig{
@@ -271,11 +271,11 @@ func TestTLSConfigBuildInvalidCAPEM(t *testing.T) {
 	certPEM, keyPEM, err := generateTestCertificate()
 	require.NoError(t, err)
 
-	err = os.WriteFile(certFile, certPEM, 0600)
+	err = os.WriteFile(certFile, certPEM, 0o600)
 	require.NoError(t, err)
-	err = os.WriteFile(keyFile, keyPEM, 0600)
+	err = os.WriteFile(keyFile, keyPEM, 0o600)
 	require.NoError(t, err)
-	err = os.WriteFile(caFile, []byte("invalid ca data"), 0600)
+	err = os.WriteFile(caFile, []byte("invalid ca data"), 0o600)
 	require.NoError(t, err)
 
 	config := &TLSConfig{
@@ -296,9 +296,9 @@ func TestMutualTLSConfigBuildRequireClientCert(t *testing.T) {
 	certPEM, keyPEM, err := generateTestCertificate()
 	require.NoError(t, err)
 
-	err = os.WriteFile(certFile, certPEM, 0600)
+	err = os.WriteFile(certFile, certPEM, 0o600)
 	require.NoError(t, err)
-	err = os.WriteFile(keyFile, keyPEM, 0600)
+	err = os.WriteFile(keyFile, keyPEM, 0o600)
 	require.NoError(t, err)
 
 	mtc := &MutualTLSConfig{
@@ -323,9 +323,9 @@ func TestMutualTLSConfigBuildNoClientCert(t *testing.T) {
 	certPEM, keyPEM, err := generateTestCertificate()
 	require.NoError(t, err)
 
-	err = os.WriteFile(certFile, certPEM, 0600)
+	err = os.WriteFile(certFile, certPEM, 0o600)
 	require.NoError(t, err)
-	err = os.WriteFile(keyFile, keyPEM, 0600)
+	err = os.WriteFile(keyFile, keyPEM, 0o600)
 	require.NoError(t, err)
 
 	mtc := &MutualTLSConfig{
@@ -348,7 +348,7 @@ func TestNewTLSVerifierWithValidCA(t *testing.T) {
 	certPEM, _, err := generateTestCertificate()
 	require.NoError(t, err)
 
-	err = os.WriteFile(caFile, certPEM, 0600)
+	err = os.WriteFile(caFile, certPEM, 0o600)
 	require.NoError(t, err)
 
 	verifier, err := NewTLSVerifier(caFile)
@@ -361,7 +361,7 @@ func TestNewTLSVerifierInvalidPEM(t *testing.T) {
 	tmpDir := t.TempDir()
 	caFile := filepath.Join(tmpDir, "ca.pem")
 
-	err := os.WriteFile(caFile, []byte("invalid pem data"), 0600)
+	err := os.WriteFile(caFile, []byte("invalid pem data"), 0o600)
 	require.NoError(t, err)
 
 	verifier, err := NewTLSVerifier(caFile)

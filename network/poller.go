@@ -96,7 +96,6 @@ func getConnFd(conn *Connection) (int, error) {
 		err = rawConn.Control(func(fdPtr uintptr) {
 			fd = int(fdPtr)
 		})
-
 		if err != nil {
 			return -1, err
 		}
