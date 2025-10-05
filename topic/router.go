@@ -130,7 +130,6 @@ func (r *Router) UnsubscribeAll(clientID string) int {
 	for filter := range clientSubs {
 		filters = append(filters, filter)
 	}
-	delete(r.subscriptions, clientID)
 	r.mu.Unlock()
 
 	count := 0
