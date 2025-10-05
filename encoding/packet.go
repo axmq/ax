@@ -80,6 +80,19 @@ type FixedHeader struct {
 	Retain bool
 }
 
+// BuildPublishFlags constructs the PUBLISH packet flags byte from the DUP, QoS, and Retain fields
+func (fh *FixedHeader) BuildPublishFlags() byte {
+	var flags byte
+	if fh.DUP {
+		flags |= 0x08
+	}
+	flags |= byte(fh.QoS) << 1
+	if fh.Retain {
+		flags |= 0x01
+	}
+	return flags
+}
+
 // ParseFixedHeader parses the MQTT fixed header from a reader for MQTT 5.0
 // This function aims for zero allocations by reusing a single-byte buffer internally
 func ParseFixedHeader(r io.Reader) (*FixedHeader, error) {
