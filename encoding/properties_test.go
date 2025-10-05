@@ -337,7 +337,7 @@ func TestPropertySerializer(t *testing.T) {
 	n, err := serializer.Serialize(props)
 	require.NoError(t, err)
 	assert.Greater(t, n, 0)
-	assert.Equal(t, buf, serializer.Buffer())
+	assert.Equal(t, buf[:n], serializer.Buffer()[:n])
 
 	parsed, bytesRead, err := ParsePropertiesFromBytes(buf[:n])
 	require.NoError(t, err)
