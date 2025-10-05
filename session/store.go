@@ -2,13 +2,6 @@ package session
 
 import (
 	"context"
-	"errors"
-)
-
-var (
-	ErrSessionNotFound      = errors.New("session not found")
-	ErrSessionAlreadyExists = errors.New("session already exists")
-	ErrStoreClosed          = errors.New("store is closed")
 )
 
 // Store defines the interface for session persistence
