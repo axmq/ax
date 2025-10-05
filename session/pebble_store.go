@@ -10,9 +10,7 @@ import (
 	"github.com/cockroachdb/pebble"
 )
 
-var (
-	sessionPrefix = []byte("session:")
-)
+var sessionPrefix = []byte("session:")
 
 // PebbleStore is a Pebble-based implementation of the Store interface
 type PebbleStore struct {
