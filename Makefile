@@ -1,4 +1,4 @@
-.PHONY: test unit_test test_race
+.PHONY: test unit_test test_race integration_test
 
 
 unit_test:
@@ -9,6 +9,9 @@ test:
 
 test_race:
 	go test ./... --race
+
+integration_test:
+	go test -tags=integration ./... -v
 
 fmt:
 	@echo "Formatting code..."
