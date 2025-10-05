@@ -4,9 +4,6 @@ import (
 	"io"
 )
 
-// MQTT 3.1.1 Packet Encoders
-// These encoders are optimized for MQTT 3.1.1 protocol version
-
 // ConnectPacket311 represents an MQTT 3.1.1 CONNECT packet
 type ConnectPacket311 struct {
 	FixedHeader     FixedHeader
@@ -103,100 +100,8 @@ type PubcompPacket311 struct {
 	PacketID    uint16
 }
 
-// Encode encodes an MQTT 3.1.1 CONNECT packet
-func (p *ConnectPacket311) Encode(w io.Writer) error {
-	// Calculate variable header + payload length
-	varHeaderLen := 0
-
-	// Protocol name (2 bytes length + "MQTT" for 3.1.1, or "MQIsdp" for 3.0)
-	varHeaderLen += 2 + len(p.ProtocolName)
-
-	// Protocol version (1 byte)
-	varHeaderLen += 1
-
-	// Connect flags (1 byte)
-	varHeaderLen += 1
-
-	// Keep alive (2 bytes)
-	varHeaderLen += 2
-
-	// Payload calculations
-	payloadLen := 0
-
-	// Client ID
-	payloadLen += 2 + len(p.ClientID)
-
-	// Will topic and payload
-	if p.WillFlag {
-		payloadLen += 2 + len(p.WillTopic)
-		payloadLen += 2 + len(p.WillPayload)
-	}
-
-	// Username
-	if p.UsernameFlag {
-		payloadLen += 2 + len(p.Username)
-	}
-
-	// Password
-	if p.PasswordFlag {
-		payloadLen += 2 + len(p.Password)
-	}
-
-	remainingLength := uint32(varHeaderLen + payloadLen)
-
-	// Encode fixed header
-	fh := FixedHeader{
-		Type:            CONNECT,
-		Flags:           0,
-		RemainingLength: remainingLength,
-	}
-
-	if err := fh.EncodeFixedHeader311(w); err != nil {
-		return err
-	}
-
-	// Encode variable header
-
-	// Protocol name
-	if err := writeUTF8String(w, p.ProtocolName); err != nil {
-		return err
-	}
-
-	// Protocol version
-	if err := writeByte(w, byte(p.ProtocolVersion)); err != nil {
-		return err
-	}
-
-	// Connect flags
-	var connectFlags byte
-	if p.CleanSession {
-		connectFlags |= 0x02
-	}
-	if p.WillFlag {
-		connectFlags |= 0x04
-		connectFlags |= byte(p.WillQoS << 3)
-		if p.WillRetain {
-			connectFlags |= 0x20
-		}
-	}
-	if p.PasswordFlag {
-		connectFlags |= 0x40
-	}
-	if p.UsernameFlag {
-		connectFlags |= 0x80
-	}
-
-	if err := writeByte(w, connectFlags); err != nil {
-		return err
-	}
-
-	// Keep alive
-	if err := writeTwoByteInt(w, p.KeepAlive); err != nil {
-		return err
-	}
-
-	// Payload
-
+// encodeConnectPayload writes the CONNECT packet payload and returns any error
+func (p *ConnectPacket311) encodeConnectPayload(w io.Writer) error {
 	// Client ID
 	if err := writeUTF8String(w, p.ClientID); err != nil {
 		return err
@@ -228,6 +133,112 @@ func (p *ConnectPacket311) Encode(w io.Writer) error {
 	}
 
 	return nil
+}
+
+// calculateConnectPayloadLength returns the total length of the CONNECT packet payload
+func (p *ConnectPacket311) calculateConnectPayloadLength() int {
+	payloadLen := 0
+
+	// Client ID
+	payloadLen += 2 + len(p.ClientID)
+
+	// Will topic and payload
+	if p.WillFlag {
+		payloadLen += 2 + len(p.WillTopic)
+		payloadLen += 2 + len(p.WillPayload)
+	}
+
+	// Username
+	if p.UsernameFlag {
+		payloadLen += 2 + len(p.Username)
+	}
+
+	// Password
+	if p.PasswordFlag {
+		payloadLen += 2 + len(p.Password)
+	}
+
+	return payloadLen
+}
+
+// buildConnectFlags builds the connect flags byte for MQTT 3.1.1
+func (p *ConnectPacket311) buildConnectFlags() byte {
+	var connectFlags byte
+	if p.CleanSession {
+		connectFlags |= 0x02
+	}
+	if p.WillFlag {
+		connectFlags |= 0x04
+		connectFlags |= byte(p.WillQoS << 3)
+		if p.WillRetain {
+			connectFlags |= 0x20
+		}
+	}
+	if p.PasswordFlag {
+		connectFlags |= 0x40
+	}
+	if p.UsernameFlag {
+		connectFlags |= 0x80
+	}
+	return connectFlags
+}
+
+// Encode encodes an MQTT 3.1.1 CONNECT packet
+func (p *ConnectPacket311) Encode(w io.Writer) error {
+	// Calculate variable header + payload length
+	varHeaderLen := 0
+
+	// Protocol name (2 bytes length + "MQTT" for 3.1.1, or "MQIsdp" for 3.0)
+	varHeaderLen += 2 + len(p.ProtocolName)
+
+	// Protocol version (1 byte)
+	varHeaderLen += 1
+
+	// Connect flags (1 byte)
+	varHeaderLen += 1
+
+	// Keep alive (2 bytes)
+	varHeaderLen += 2
+
+	remainingLength := uint32(varHeaderLen + p.calculateConnectPayloadLength())
+
+	// Encode fixed header
+	fh := FixedHeader{
+		Type:            CONNECT,
+		Flags:           0,
+		RemainingLength: remainingLength,
+	}
+
+	if err := fh.EncodeFixedHeader311(w); err != nil {
+		return err
+	}
+
+	// Encode variable header
+
+	// Protocol name
+	if err := writeUTF8String(w, p.ProtocolName); err != nil {
+		return err
+	}
+
+	// Protocol version
+	if err := writeByte(w, byte(p.ProtocolVersion)); err != nil {
+		return err
+	}
+
+	// Connect flags
+	connectFlags := p.buildConnectFlags()
+
+	if err := writeByte(w, connectFlags); err != nil {
+		return err
+	}
+
+	// Keep alive
+	if err := writeTwoByteInt(w, p.KeepAlive); err != nil {
+		return err
+	}
+
+	// Payload
+	return p.encodeConnectPayload(w)
 }
 
 // Encode encodes an MQTT 3.1.1 CONNACK packet
@@ -268,21 +279,11 @@ func (p *PublishPacket311) Encode(w io.Writer) error {
 	// Encode fixed header
 	fh := FixedHeader{
 		Type:            PUBLISH,
-		Flags:           p.FixedHeader.Flags,
+		Flags:           p.FixedHeader.BuildPublishFlags(),
 		RemainingLength: remainingLength,
 		DUP:             p.FixedHeader.DUP,
 		QoS:             p.FixedHeader.QoS,
 		Retain:          p.FixedHeader.Retain,
-	}
-
-	// Construct flags for PUBLISH
-	fh.Flags = 0
-	if fh.DUP {
-		fh.Flags |= 0x08
-	}
-	fh.Flags |= byte(fh.QoS) << 1
-	if fh.Retain {
-		fh.Flags |= 0x01
 	}
 
 	if err := fh.EncodeFixedHeader311(w); err != nil {

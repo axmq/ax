@@ -5,11 +5,7 @@ import (
 	"io"
 )
 
-// Encoder provides efficient, zero-allocation encoding for MQTT packets
-// This implementation uses buffer pooling and direct byte slice manipulation
-// to minimize heap allocations during packet encoding.
-
-// EncodeConnectPacket encodes an MQTT 5.0 CONNECT packet
+// Encode encodes an MQTT 5.0 CONNECT packet
 func (p *ConnectPacket) Encode(w io.Writer) error {
 	// Calculate variable header + payload length
 	varHeaderLen := 0
@@ -158,7 +154,7 @@ func (p *ConnectPacket) Encode(w io.Writer) error {
 	return nil
 }
 
-// EncodeConnackPacket encodes an MQTT 5.0 CONNACK packet
+// Encode encodes an MQTT 5.0 CONNACK packet
 func (p *ConnackPacket) Encode(w io.Writer) error {
 	// Calculate remaining length
 	propsBytes, err := p.Properties.encodeToBytes()
@@ -200,7 +196,7 @@ func (p *ConnackPacket) Encode(w io.Writer) error {
 	return err
 }
 
-// EncodePublishPacket encodes an MQTT 5.0 PUBLISH packet
+// Encode encodes an MQTT 5.0 PUBLISH packet
 func (p *PublishPacket) Encode(w io.Writer) error {
 	// Calculate remaining length
 	propsBytes, err := p.Properties.encodeToBytes()
@@ -218,21 +214,11 @@ func (p *PublishPacket) Encode(w io.Writer) error {
 	// Encode fixed header
 	fh := FixedHeader{
 		Type:            PUBLISH,
-		Flags:           p.FixedHeader.Flags,
+		Flags:           p.FixedHeader.BuildPublishFlags(),
 		RemainingLength: remainingLength,
 		DUP:             p.FixedHeader.DUP,
 		QoS:             p.FixedHeader.QoS,
 		Retain:          p.FixedHeader.Retain,
-	}
-
-	// Construct flags for PUBLISH
-	fh.Flags = 0
-	if fh.DUP {
-		fh.Flags |= 0x08
-	}
-	fh.Flags |= byte(fh.QoS) << 1
-	if fh.Retain {
-		fh.Flags |= 0x01
 	}
 
 	if err := fh.EncodeFixedHeader(w); err != nil {
@@ -266,22 +252,22 @@ func (p *PublishPacket) Encode(w io.Writer) error {
 	return err
 }
 
-// EncodePubackPacket encodes an MQTT 5.0 PUBACK packet
+// Encode encodes an MQTT 5.0 PUBACK packet
 func (p *PubackPacket) Encode(w io.Writer) error {
 	return encodeAckPacket(w, PUBACK, p.PacketID, p.ReasonCode, &p.Properties)
 }
 
-// EncodePubrecPacket encodes an MQTT 5.0 PUBREC packet
+// Encode encodes an MQTT 5.0 PUBREC packet
 func (p *PubrecPacket) Encode(w io.Writer) error {
 	return encodeAckPacket(w, PUBREC, p.PacketID, p.ReasonCode, &p.Properties)
 }
 
-// EncodePubrelPacket encodes an MQTT 5.0 PUBREL packet
+// Encode encodes an MQTT 5.0 PUBREL packet
 func (p *PubrelPacket) Encode(w io.Writer) error {
 	return encodeAckPacketWithFlags(w, PUBREL, 0x02, p.PacketID, p.ReasonCode, &p.Properties)
 }
 
-// EncodePubcompPacket encodes an MQTT 5.0 PUBCOMP packet
+// Encode encodes an MQTT 5.0 PUBCOMP packet
 func (p *PubcompPacket) Encode(w io.Writer) error {
 	return encodeAckPacket(w, PUBCOMP, p.PacketID, p.ReasonCode, &p.Properties)
 }
@@ -334,7 +320,51 @@ func encodeAckPacketWithFlags(w io.Writer, packetType PacketType, flags byte, pa
 	return err
 }
 
-// EncodeSubscribePacket encodes an MQTT 5.0 SUBSCRIBE packet
+// writeReasonCodes is a helper to write a slice of reason codes
+func writeReasonCodes(w io.Writer, reasonCodes []ReasonCode) error {
+	for _, rc := range reasonCodes {
+		if err := writeByte(w, byte(rc)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// encodeAckPacketWithReasonCodes is a helper to encode acknowledgment packets with reason codes (SUBACK, UNSUBACK)
+func encodeAckPacketWithReasonCodes(w io.Writer, packetType PacketType, flags byte, packetID uint16, reasonCodes []ReasonCode, props *Properties) error {
+	propsBytes, err := props.encodeToBytes()
+	if err != nil {
+		return err
+	}
+
+	remainingLength := uint32(2 + len(propsBytes) + len(reasonCodes))
+
+	// Encode fixed header
+	fh := FixedHeader{
+		Type:            packetType,
+		Flags:           flags,
+		RemainingLength: remainingLength,
+	}
+
+	if err := fh.EncodeFixedHeader(w); err != nil {
+		return err
+	}
+
+	// Packet ID
+	if err := writeTwoByteInt(w, packetID); err != nil {
+		return err
+	}
+
+	// Properties
+	if _, err := w.Write(propsBytes); err != nil {
+		return err
+	}
+
+	// Reason codes
+	return writeReasonCodes(w, reasonCodes)
+}
+
+// Encode encodes an MQTT 5.0 SUBSCRIBE packet
 func (p *SubscribePacket) Encode(w io.Writer) error {
 	// Calculate remaining length
 	propsBytes, err := p.Properties.encodeToBytes()
@@ -395,47 +425,12 @@ func (p *SubscribePacket) Encode(w io.Writer) error {
 	return nil
 }
 
-// EncodeSubackPacket encodes an MQTT 5.0 SUBACK packet
+// Encode encodes an MQTT 5.0 SUBACK packet
 func (p *SubackPacket) Encode(w io.Writer) error {
-	propsBytes, err := p.Properties.encodeToBytes()
-	if err != nil {
-		return err
-	}
-
-	remainingLength := uint32(2 + len(propsBytes) + len(p.ReasonCodes))
-
-	// Encode fixed header
-	fh := FixedHeader{
-		Type:            SUBACK,
-		Flags:           0,
-		RemainingLength: remainingLength,
-	}
-
-	if err := fh.EncodeFixedHeader(w); err != nil {
-		return err
-	}
-
-	// Packet ID
-	if err := writeTwoByteInt(w, p.PacketID); err != nil {
-		return err
-	}
-
-	// Properties
-	if _, err := w.Write(propsBytes); err != nil {
-		return err
-	}
-
-	// Reason codes
-	for _, rc := range p.ReasonCodes {
-		if err := writeByte(w, byte(rc)); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return encodeAckPacketWithReasonCodes(w, SUBACK, 0, p.PacketID, p.ReasonCodes, &p.Properties)
 }
 
-// EncodeUnsubscribePacket encodes an MQTT 5.0 UNSUBSCRIBE packet
+// Encode encodes an MQTT 5.0 UNSUBSCRIBE packet
 func (p *UnsubscribePacket) Encode(w io.Writer) error {
 	propsBytes, err := p.Properties.encodeToBytes()
 	if err != nil {
@@ -480,47 +475,12 @@ func (p *UnsubscribePacket) Encode(w io.Writer) error {
 	return nil
 }
 
-// EncodeUnsubackPacket encodes an MQTT 5.0 UNSUBACK packet
+// Encode encodes an MQTT 5.0 UNSUBACK packet
 func (p *UnsubackPacket) Encode(w io.Writer) error {
-	propsBytes, err := p.Properties.encodeToBytes()
-	if err != nil {
-		return err
-	}
-
-	remainingLength := uint32(2 + len(propsBytes) + len(p.ReasonCodes))
-
-	// Encode fixed header
-	fh := FixedHeader{
-		Type:            UNSUBACK,
-		Flags:           0,
-		RemainingLength: remainingLength,
-	}
-
-	if err := fh.EncodeFixedHeader(w); err != nil {
-		return err
-	}
-
-	// Packet ID
-	if err := writeTwoByteInt(w, p.PacketID); err != nil {
-		return err
-	}
-
-	// Properties
-	if _, err := w.Write(propsBytes); err != nil {
-		return err
-	}
-
-	// Reason codes
-	for _, rc := range p.ReasonCodes {
-		if err := writeByte(w, byte(rc)); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return encodeAckPacketWithReasonCodes(w, UNSUBACK, 0, p.PacketID, p.ReasonCodes, &p.Properties)
 }
 
-// EncodePingreqPacket encodes an MQTT 5.0 PINGREQ packet
+// Encode encodes an MQTT 5.0 PINGREQ packet
 func (p *PingreqPacket) Encode(w io.Writer) error {
 	fh := FixedHeader{
 		Type:            PINGREQ,
@@ -530,7 +490,7 @@ func (p *PingreqPacket) Encode(w io.Writer) error {
 	return fh.EncodeFixedHeader(w)
 }
 
-// EncodePingrespPacket encodes an MQTT 5.0 PINGRESP packet
+// Encode encodes an MQTT 5.0 PINGRESP packet
 func (p *PingrespPacket) Encode(w io.Writer) error {
 	fh := FixedHeader{
 		Type:            PINGRESP,
@@ -540,7 +500,7 @@ func (p *PingrespPacket) Encode(w io.Writer) error {
 	return fh.EncodeFixedHeader(w)
 }
 
-// EncodeDisconnectPacket encodes an MQTT 5.0 DISCONNECT packet
+// Encode encodes an MQTT 5.0 DISCONNECT packet
 func (p *DisconnectPacket) Encode(w io.Writer) error {
 	propsBytes, err := p.Properties.encodeToBytes()
 	if err != nil {
@@ -578,7 +538,7 @@ func (p *DisconnectPacket) Encode(w io.Writer) error {
 	return err
 }
 
-// EncodeAuthPacket encodes an MQTT 5.0 AUTH packet
+// Encode encodes an MQTT 5.0 AUTH packet
 func (p *AuthPacket) Encode(w io.Writer) error {
 	propsBytes, err := p.Properties.encodeToBytes()
 	if err != nil {
