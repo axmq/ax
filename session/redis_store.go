@@ -258,13 +258,40 @@ func (r *RedisStore) CountByState(ctx context.Context, state State) (int64, erro
 		return 0, err
 	}
 
+	if len(clientIDs) == 0 {
+		return 0, nil
+	}
+
+	// Use pipelining to batch load all sessions
+	pipe := r.client.Pipeline()
+	cmds := make([]*redis.StringCmd, len(clientIDs))
+
+	for i, clientID := range clientIDs {
+		key := makeRedisKey(clientID)
+		cmds[i] = pipe.Get(ctx, key)
+	}
+
+	_, err = pipe.Exec(ctx)
+	if err != nil && err != redis.Nil {
+		// Pipelining can return redis.Nil if any key doesn't exist, which is expected
+		// We'll handle individual errors below
+	}
+
 	var count int64
-	for _, clientID := range clientIDs {
-		session, err := r.Load(ctx, clientID)
+	for _, cmd := range cmds {
+		value, err := cmd.Result()
 		if err != nil {
+			// Skip sessions that don't exist or have errors
 			continue
 		}
-		if session.GetState() == state {
+
+		var data sessionData
+		if err := json.Unmarshal([]byte(value), &data); err != nil {
+			// Skip sessions with invalid data
+			continue
+		}
+
+		if data.State == state {
 			count++
 		}
 	}
