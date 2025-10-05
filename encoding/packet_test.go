@@ -887,3 +887,38 @@ func TestParseConnectPacket_UsernamePasswordErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildPublishFlags(t *testing.T) {
+	tests := []struct {
+		name     string
+		dup      bool
+		qos      QoS
+		retain   bool
+		expected byte
+	}{
+		{"QoS0", false, QoS0, false, 0x00},
+		{"QoS0 Retain", false, QoS0, true, 0x01},
+		{"QoS1", false, QoS1, false, 0x02},
+		{"QoS1 Retain", false, QoS1, true, 0x03},
+		{"QoS2", false, QoS2, false, 0x04},
+		{"QoS2 Retain", false, QoS2, true, 0x05},
+		{"DUP QoS0", true, QoS0, false, 0x08},
+		{"DUP QoS0 Retain", true, QoS0, true, 0x09},
+		{"DUP QoS1", true, QoS1, false, 0x0A},
+		{"DUP QoS1 Retain", true, QoS1, true, 0x0B},
+		{"DUP QoS2", true, QoS2, false, 0x0C},
+		{"DUP QoS2 Retain", true, QoS2, true, 0x0D},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fh := &FixedHeader{
+				DUP:    tt.dup,
+				QoS:    tt.qos,
+				Retain: tt.retain,
+			}
+			result := fh.BuildPublishFlags()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
