@@ -154,8 +154,8 @@ func makeKey(clientID string) []byte {
 
 // Save stores or updates a session
 func (p *PebbleStore) Save(ctx context.Context, session *Session) error {
-	if ctx.Err() != nil {
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	p.mu.RLock()
@@ -177,8 +177,8 @@ func (p *PebbleStore) Save(ctx context.Context, session *Session) error {
 
 // Load retrieves a session by client ID
 func (p *PebbleStore) Load(ctx context.Context, clientID string) (*Session, error) {
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 
 	p.mu.RLock()
@@ -208,8 +208,8 @@ func (p *PebbleStore) Load(ctx context.Context, clientID string) (*Session, erro
 
 // Delete removes a session
 func (p *PebbleStore) Delete(ctx context.Context, clientID string) error {
-	if ctx.Err() != nil {
-		return ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	p.mu.RLock()
@@ -225,8 +225,8 @@ func (p *PebbleStore) Delete(ctx context.Context, clientID string) error {
 
 // Exists checks if a session exists
 func (p *PebbleStore) Exists(ctx context.Context, clientID string) (bool, error) {
-	if ctx.Err() != nil {
-		return false, ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return false, err
 	}
 
 	p.mu.RLock()
@@ -250,8 +250,8 @@ func (p *PebbleStore) Exists(ctx context.Context, clientID string) (bool, error)
 
 // List returns all session client IDs
 func (p *PebbleStore) List(ctx context.Context) ([]string, error) {
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 
 	p.mu.RLock()
@@ -300,8 +300,8 @@ func (p *PebbleStore) Close() error {
 
 // Count returns the total number of sessions
 func (p *PebbleStore) Count(ctx context.Context) (int64, error) {
-	if ctx.Err() != nil {
-		return 0, ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return 0, err
 	}
 
 	p.mu.RLock()
@@ -335,8 +335,8 @@ func (p *PebbleStore) Count(ctx context.Context) (int64, error) {
 
 // CountByState returns the number of sessions in a given state
 func (p *PebbleStore) CountByState(ctx context.Context, state State) (int64, error) {
-	if ctx.Err() != nil {
-		return 0, ctx.Err()
+	if err := ctx.Err(); err != nil {
+		return 0, err
 	}
 
 	p.mu.RLock()
