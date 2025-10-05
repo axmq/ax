@@ -1,6 +1,9 @@
 package topic
 
-import "sync/atomic"
+import (
+	"sync"
+	"sync/atomic"
+)
 
 // Subscription represents an active subscription with all MQTT 5.0 features
 type Subscription struct {
@@ -63,6 +66,7 @@ type SharedSubscriptionGroup struct {
 	groupName   string
 	subscribers []SubscriberInfo
 	counter     atomic.Uint64 // Round-robin counter
+	mu          sync.RWMutex  // Protects subscribers slice
 }
 
 // NewSharedSubscriptionGroup creates a new shared subscription group
@@ -75,11 +79,15 @@ func NewSharedSubscriptionGroup(groupName string) *SharedSubscriptionGroup {
 
 // AddSubscriber adds a subscriber to the group
 func (g *SharedSubscriptionGroup) AddSubscriber(sub SubscriberInfo) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	g.subscribers = append(g.subscribers, sub)
 }
 
 // RemoveSubscriber removes a subscriber from the group
 func (g *SharedSubscriptionGroup) RemoveSubscriber(clientID string) bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
 	for i, sub := range g.subscribers {
 		if sub.ClientID == clientID {
 			g.subscribers = append(g.subscribers[:i], g.subscribers[i+1:]...)
@@ -91,6 +99,8 @@ func (g *SharedSubscriptionGroup) RemoveSubscriber(clientID string) bool {
 
 // NextSubscriber returns the next subscriber using round-robin
 func (g *SharedSubscriptionGroup) NextSubscriber() (SubscriberInfo, bool) {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
 	if len(g.subscribers) == 0 {
 		return SubscriberInfo{}, false
 	}
@@ -100,11 +110,15 @@ func (g *SharedSubscriptionGroup) NextSubscriber() (SubscriberInfo, bool) {
 
 // Size returns the number of subscribers in the group
 func (g *SharedSubscriptionGroup) Size() int {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
 	return len(g.subscribers)
 }
 
 // GetSubscribers returns all subscribers in the group
 func (g *SharedSubscriptionGroup) GetSubscribers() []SubscriberInfo {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
 	result := make([]SubscriberInfo, len(g.subscribers))
 	copy(result, g.subscribers)
 	return result
