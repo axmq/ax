@@ -1,16 +1,59 @@
 package network
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
 	"net"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// generateTestCertificate creates a valid self-signed certificate for testing
+func generateTestCertificate() (certPEM, keyPEM []byte, err error) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName: "localhost",
+		},
+		NotBefore:             time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+		NotAfter:              time.Date(2034, 1, 1, 0, 0, 0, 0, time.UTC),
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &privateKey.PublicKey, privateKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	certPEM = pem.EncodeToMemory(&pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: certDER,
+	})
+
+	keyPEM = pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
+	})
+
+	return certPEM, keyPEM, nil
+}
 
 func TestDefaultTLSConfig(t *testing.T) {
 	config := DefaultTLSConfig()
@@ -135,37 +178,10 @@ func TestTLSConfigBuildWithValidCerts(t *testing.T) {
 	certFile := filepath.Join(tmpDir, "cert.pem")
 	keyFile := filepath.Join(tmpDir, "key.pem")
 
-	certPEM := []byte(`-----BEGIN CERTIFICATE-----
-MIIB9TCCAV6gAwIBAgIRAIuPYZlKy5cMPLKMwXPLAH8wDQYJKoZIhvcNAQELBQAw
-ETEPMA0GA1UEAxMGdGVzdENBMB4XDTI0MDEwMTAwMDAwMFoXDTM0MDEwMTAwMDAw
-MFowETEPMA0GA1UEAxMGdGVzdENBMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKB
-gQC6Z8V7DP/1vRlGg8K8rk9lczP+s8jQ6kJvH6kzDW3VB6y6sQkdQxY1shKQPwAb
-JK+WYPGpKnxDMdIBPx6Zi5Q3l7RgxMgMzqW3eU7HqHF0t2OwYsVHPGxF3P3OEQdm
-KMhvCPj4AqwsH0mVnJ2v4nBUGP7vbqQVvLLdSLDNpJKwmQIDAQABo0UwQzAOBgNV
-HQ8BAf8EBAMCAqQwEwYDVR0lBAwwCgYIKwYBBQUHAwEwDwYDVR0TAQH/BAUwAwEB
-/zALBgNVHQ8EBAMCAoQwDQYJKoZIhvcNAQELBQADgYEADvJ6V8ycJQY1mCL0Yd6o
-vPRYQ3Vqx5LKQfUGBdmGTGWP/bJQvJvNrGDSQVCvbqT5Y9Ky3D1FNQpCPgQKx0Nw
-zXBmKkCl2LJPhHUVqQ7nF8HqVlKg0v2DvxHRgqANPCxGZvJnKb4pLPKCNkQdIAFV
-2y0kcKkBQx/lPJ5RMZhUJWE=
------END CERTIFICATE-----`)
+	certPEM, keyPEM, err := generateTestCertificate()
+	require.NoError(t, err)
 
-	keyPEM := []byte(`-----BEGIN RSA PRIVATE KEY-----
-MIICXAIBAAKBgQC6Z8V7DP/1vRlGg8K8rk9lczP+s8jQ6kJvH6kzDW3VB6y6sQkd
-QxY1shKQPwAbJK+WYPGpKnxDMdIBPx6Zi5Q3l7RgxMgMzqW3eU7HqHF0t2OwYsVH
-PGXF3P3OEQdmKMhvCPj4AqwsH0mVnJ2v4nBUGP7vbqQVvLLdSLDNpJKwmQIDAQAB
-AoGAX8E2T2J8vYPQZvPJvF9F7GqJQEWzMvw3cQzEYXNMQJYLnBmP7B0jMPIVvCxE
-CvE5HRgQQCvNJT2FzHNvJ0kLwYQh/C6TBgvYMZQrp0xPNJWKGCYC0cLPvZLBB7E6
-F0qVqVHHHqvXvxYQz0LxP7tFhLbxoJQBPZLQx6K+F6+nLAECQQDiT7Lyl3BYvR2M
-LZ0F6vNYLCqMv3f0E8fYFvL3CQx3vT7vWvL6dQFmLX6F7LLVvLL4vWYFhQdVPbL5
-vxJYz0yRAkEA0rL7xf3Q5JW6P7Q9YFv4LCvQVzL8vPYLF3mBvQx3YFLxW3xLF6vL
-xQxQvLvYPxFvBYFxL3L7YxPvLxYFxL5QmQJAX3J0PYxFLvY3FxLYQx7vLxYFLxL3
-QYFxL6PxQYL3vxFxL3YxPLvxYFxL3LYQxPLvxYFLxL3QYFxL6PxQYL3vxECQHxL3
-YxPLvxYFxL3LYQxPLvxYFLxL3QYFxL6PxQYL3vxFxL3YxPLvxYFxL3LYQxPLvxYF
-LxL3QYFxL6PxQYL3vxECQQC5L3YxPLvxYFxL3LYQxPLvxYFLxL3QYFxL6PxQYL3v
-xFxL3YxPLvxYFxL3LYQxPLvxYFLxL3QYFxL6PxQYL3vx
------END RSA PRIVATE KEY-----`)
-
-	err := os.WriteFile(certFile, certPEM, 0600)
+	err = os.WriteFile(certFile, certPEM, 0600)
 	require.NoError(t, err)
 	err = os.WriteFile(keyFile, keyPEM, 0600)
 	require.NoError(t, err)
@@ -190,37 +206,9 @@ func TestTLSConfigBuildWithCA(t *testing.T) {
 	keyFile := filepath.Join(tmpDir, "key.pem")
 	caFile := filepath.Join(tmpDir, "ca.pem")
 
-	certPEM := []byte(`-----BEGIN CERTIFICATE-----
-MIIB9TCCAV6gAwIBAgIRAIuPYZlKy5cMPLKMwXPLAH8wDQYJKoZIhvcNAQELBQAw
-ETEPMA0GA1UEAxMGdGVzdENBMB4XDTI0MDEwMTAwMDAwMFoXDTM0MDEwMTAwMDAw
-MFowETEPMA0GA1UEAxMGdGVzdENBMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKB
-gQC6Z8V7DP/1vRlGg8K8rk9lczP+s8jQ6kJvH6kzDW3VB6y6sQkdQxY1shKQPwAb
-JK+WYPGpKnxDMdIBPx6Zi5Q3l7RgxMgMzqW3eU7HqHF0t2OwYsVHPGxF3P3OEQdm
-KMhvCPj4AqwsH0mVnJ2v4nBUGP7vbqQVvLLdSLDNpJKwmQIDAQABo0UwQzAOBgNV
-HQ8BAf8EBAMCAqQwEwYDVR0lBAwwCgYIKwYBBQUHAwEwDwYDVR0TAQH/BAUwAwEB
-/zALBgNVHQ8EBAMCAoQwDQYJKoZIhvcNAQELBQADgYEADvJ6V8ycJQY1mCL0Yd6o
-vPRYQ3Vqx5LKQfUGBdmGTGWP/bJQvJvNrGDSQVCvbqT5Y9Ky3D1FNQpCPgQKx0Nw
-zXBmKkCl2LJPhHUVqQ7nF8HqVlKg0v2DvxHRgqANPCxGZvJnKb4pLPKCNkQdIAFV
-2y0kcKkBQx/lPJ5RMZhUJWE=
------END CERTIFICATE-----`)
+	certPEM, keyPEM, err := generateTestCertificate()
+	require.NoError(t, err)
 
-	keyPEM := []byte(`-----BEGIN RSA PRIVATE KEY-----
-MIICXAIBAAKBgQC6Z8V7DP/1vRlGg8K8rk9lczP+s8jQ6kJvH6kzDW3VB6y6sQkd
-QxY1shKQPwAbJK+WYPGpKnxDMdIBPx6Zi5Q3l7RgxMgMzqW3eU7HqHF0t2OwYsVH
-PGXF3P3OEQdmKMhvCPj4AqwsH0mVnJ2v4nBUGP7vbqQVvLLdSLDNpJKwmQIDAQAB
-AoGAX8E2T2J8vYPQZvPJvF9F7GqJQEWzMvw3cQzEYXNMQJYLnBmP7B0jMPIVvCxE
-CvE5HRgQQCvNJT2FzHNvJ0kLwYQh/C6TBgvYMZQrp0xPNJWKGCYC0cLPvZLBB7E6
-F0qVqVHHHqvXvxYQz0LxP7tFhLbxoJQBPZLQx6K+F6+nLAECQQDiT7Lyl3BYvR2M
-LZ0F6vNYLCqMv3f0E8fYFvL3CQx3vT7vWvL6dQFmLX6F7LLVvLL4vWYFhQdVPbL5
-vxJYz0yRAkEA0rL7xf3Q5JW6P7Q9YFv4LCvQVzL8vPYLF3mBvQx3YFLxW3xLF6vL
-xQxQvLvYPxFvBYFxL3L7YxPvLxYFxL5QmQJAX3J0PYxFLvY3FxLYQx7vLxYFLxL3
-QYFxL6PxQYL3vxFxL3YxPLvxYFxL3LYQxPLvxYFLxL3QYFxL6PxQYL3vxECQHxL3
-YxPLvxYFxL3LYQxPLvxYFLxL3QYFxL6PxQYL3vxFxL3YxPLvxYFxL3LYQxPLvxYF
-LxL3QYFxL6PxQYL3vxECQQC5L3YxPLvxYFxL3LYQxPLvxYFLxL3QYFxL6PxQYL3v
-xFxL3YxPLvxYFxL3LYQxPLvxYFLxL3QYFxL6PxQYL3vx
------END RSA PRIVATE KEY-----`)
-
-	var err error
 	err = os.WriteFile(certFile, certPEM, 0600)
 	require.NoError(t, err)
 	err = os.WriteFile(keyFile, keyPEM, 0600)
@@ -255,44 +243,13 @@ func TestTLSConfigBuildInvalidCAFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	certFile := filepath.Join(tmpDir, "cert.pem")
 	keyFile := filepath.Join(tmpDir, "key.pem")
-	caFile := filepath.Join(tmpDir, "ca.pem")
 
-	certPEM := []byte(`-----BEGIN CERTIFICATE-----
-MIIB9TCCAV6gAwIBAgIRAIuPYZlKy5cMPLKMwXPLAH8wDQYJKoZIhvcNAQELBQAw
-ETEPMA0GA1UEAxMGdGVzdENBMB4XDTI0MDEwMTAwMDAwMFoXDTM0MDEwMTAwMDAw
-MFowETEPMA0GA1UEAxMGdGVzdENBMIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKB
-gQC6Z8V7DP/1vRlGg8K8rk9lczP+s8jQ6kJvH6kzDW3VB6y6sQkdQxY1shKQPwAb
-JK+WYPGpKnxDMdIBPx6Zi5Q3l7RgxMgMzqW3eU7HqHF0t2OwYsVHPGxF3P3OEQdm
-KMhvCPj4AqwsH0mVnJ2v4nBUGP7vbqQVvLLdSLDNpJKwmQIDAQABo0UwQzAOBgNV
-HQ8BAf8EBAMCAqQwEwYDVR0lBAwwCgYIKwYBBQUHAwEwDwYDVR0TAQH/BAUwAwEB
-/zALBgNVHQ8EBAMCAoQwDQYJKoZIhvcNAQELBQADgYEADvJ6V8ycJQY1mCL0Yd6o
-vPRYQ3Vqx5LKQfUGBdmGTGWP/bJQvJvNrGDSQVCvbqT5Y9Ky3D1FNQpCPgQKx0Nw
-zXBmKkCl2LJPhHUVqQ7nF8HqVlKg0v2DvxHRgqANPCxGZvJnKb4pLPKCNkQdIAFV
-2y0kcKkBQx/lPJ5RMZhUJWE=
------END CERTIFICATE-----`)
+	certPEM, keyPEM, err := generateTestCertificate()
+	require.NoError(t, err)
 
-	keyPEM := []byte(`-----BEGIN RSA PRIVATE KEY-----
-MIICXAIBAAKBgQC6Z8V7DP/1vRlGg8K8rk9lczP+s8jQ6kJvH6kzDW3VB6y6sQkd
-QxY1shKQPwAbJK+WYPGpKnxDMdIBPx6Zi5Q3l7RgxMgMzqW3eU7HqHF0t2OwYsVH
-PGXF3P3OEQdmKMhvCPj4AqwsH0mVnJ2v4nBUGP7vbqQVvLLdSLDNpJKwmQIDAQAB
-AoGAX8E2T2J8vYPQZvPJvF9F7GqJQEWzMvw3cQzEYXNMQJYLnBmP7B0jMPIVvCxE
-CvE5HRgQQCvNJT2FzHNvJ0kLwYQh/C6TBgvYMZQrp0xPNJWKGCYC0cLPvZLBB7E6
-F0qVqVHHHqvXvxYQz0LxP7tFhLbxoJQBPZLQx6K+F6+nLAECQQDiT7Lyl3BYvR2M
-LZ0F6vNYLCqMv3f0E8fYFvL3CQx3vT7vWvL6dQFmLX6F7LLVvLL4vWYFhQdVPbL5
-vxJYz0yRAkEA0rL7xf3Q5JW6P7Q9YFv4LCvQVzL8vPYLF3mBvQx3YFLxW3xLF6vL
-xQxQvLvYPxFvBYFxL3L7YxPvLxYFxL5QmQJAX3J0PYxFLvY3FxLYQx7vLxYFLxL3
-QYFxL6PxQYL3vxFxL3YxPLvxYFxL3LYQxPLvxYFLxL3QYFxL6PxQYL3vxECQHxL3
-YxPLvxYFxL3LYQxPLvxYFLxL3QYFxL6PxQYL3vxFxL3YxPLvxYFxL3LYQxPLvxYF
-LxL3QYFxL6PxQYL3vxECQQC5L3YxPLvxYFxL3LYQxPLvxYFLxL3QYFxL6PxQYL3v
-xFxL3YxPLvxYFxL3LYQxPLvxYFLxL3QYFxL6PxQYL3vx
------END RSA PRIVATE KEY-----`)
-
-	var err error
 	err = os.WriteFile(certFile, certPEM, 0600)
 	require.NoError(t, err)
 	err = os.WriteFile(keyFile, keyPEM, 0600)
-	require.NoError(t, err)
-	err = os.WriteFile(caFile, certPEM, 0600)
 	require.NoError(t, err)
 
 	config := &TLSConfig{
@@ -302,5 +259,120 @@ xFxL3YxPLvxYFxL3LYQxPLvxYFLxL3QYFxL6PxQYL3vx
 	}
 
 	_, err = config.Build()
+	assert.Error(t, err)
+}
+
+func TestTLSConfigBuildInvalidCAPEM(t *testing.T) {
+	tmpDir := t.TempDir()
+	certFile := filepath.Join(tmpDir, "cert.pem")
+	keyFile := filepath.Join(tmpDir, "key.pem")
+	caFile := filepath.Join(tmpDir, "ca.pem")
+
+	certPEM, keyPEM, err := generateTestCertificate()
+	require.NoError(t, err)
+
+	err = os.WriteFile(certFile, certPEM, 0600)
+	require.NoError(t, err)
+	err = os.WriteFile(keyFile, keyPEM, 0600)
+	require.NoError(t, err)
+	err = os.WriteFile(caFile, []byte("invalid ca data"), 0600)
+	require.NoError(t, err)
+
+	config := &TLSConfig{
+		CertFile: certFile,
+		KeyFile:  keyFile,
+		CAFile:   caFile,
+	}
+
+	_, err = config.Build()
+	assert.Error(t, err)
+}
+
+func TestMutualTLSConfigBuildRequireClientCert(t *testing.T) {
+	tmpDir := t.TempDir()
+	certFile := filepath.Join(tmpDir, "cert.pem")
+	keyFile := filepath.Join(tmpDir, "key.pem")
+
+	certPEM, keyPEM, err := generateTestCertificate()
+	require.NoError(t, err)
+
+	err = os.WriteFile(certFile, certPEM, 0600)
+	require.NoError(t, err)
+	err = os.WriteFile(keyFile, keyPEM, 0600)
+	require.NoError(t, err)
+
+	mtc := &MutualTLSConfig{
+		TLSConfig: TLSConfig{
+			CertFile: certFile,
+			KeyFile:  keyFile,
+		},
+		RequireClientCert: true,
+		VerifyClientCert:  false,
+	}
+
+	tlsConfig, err := mtc.Build()
+	require.NoError(t, err)
+	assert.Equal(t, tls.RequireAnyClientCert, tlsConfig.ClientAuth)
+}
+
+func TestMutualTLSConfigBuildNoClientCert(t *testing.T) {
+	tmpDir := t.TempDir()
+	certFile := filepath.Join(tmpDir, "cert.pem")
+	keyFile := filepath.Join(tmpDir, "key.pem")
+
+	certPEM, keyPEM, err := generateTestCertificate()
+	require.NoError(t, err)
+
+	err = os.WriteFile(certFile, certPEM, 0600)
+	require.NoError(t, err)
+	err = os.WriteFile(keyFile, keyPEM, 0600)
+	require.NoError(t, err)
+
+	mtc := &MutualTLSConfig{
+		TLSConfig: TLSConfig{
+			CertFile: certFile,
+			KeyFile:  keyFile,
+		},
+		RequireClientCert: false,
+	}
+
+	tlsConfig, err := mtc.Build()
+	require.NoError(t, err)
+	assert.Equal(t, tls.VerifyClientCertIfGiven, tlsConfig.ClientAuth)
+}
+
+func TestNewTLSVerifierWithValidCA(t *testing.T) {
+	tmpDir := t.TempDir()
+	caFile := filepath.Join(tmpDir, "ca.pem")
+
+	certPEM, _, err := generateTestCertificate()
+	require.NoError(t, err)
+
+	err = os.WriteFile(caFile, certPEM, 0600)
+	require.NoError(t, err)
+
+	verifier, err := NewTLSVerifier(caFile)
+	require.NoError(t, err)
+	assert.NotNil(t, verifier)
+	assert.NotNil(t, verifier.caPool)
+}
+
+func TestNewTLSVerifierInvalidPEM(t *testing.T) {
+	tmpDir := t.TempDir()
+	caFile := filepath.Join(tmpDir, "ca.pem")
+
+	err := os.WriteFile(caFile, []byte("invalid pem data"), 0600)
+	require.NoError(t, err)
+
+	verifier, err := NewTLSVerifier(caFile)
+	assert.Error(t, err)
+	assert.Nil(t, verifier)
+}
+
+func TestTLSVerifierVerifyCertificateInvalidCert(t *testing.T) {
+	verifier, err := NewTLSVerifier("")
+	require.NoError(t, err)
+
+	err = verifier.VerifyCertificate([][]byte{{0x00, 0x01, 0x02}}, nil)
 	assert.Error(t, err)
 }
