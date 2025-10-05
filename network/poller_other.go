@@ -3,12 +3,14 @@
 package network
 
 import (
+	"sync/atomic"
 	"time"
 )
 
 type FallbackPoller struct {
 	state  *pollerState
 	config *PollerConfig
+	nextFd atomic.Int64
 }
 
 func NewPoller(config *PollerConfig) (Poller, error) {
@@ -29,7 +31,7 @@ func (fp *FallbackPoller) Add(conn *Connection, events EventType) error {
 
 	fd, err := getConnFd(conn)
 	if err != nil {
-		fd = int(fp.state.connMap)
+		fd = int(fp.nextFd.Add(1))
 	}
 
 	fp.state.add(fd, conn)
