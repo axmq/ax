@@ -18,6 +18,7 @@ require (
 	github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
+	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/getsentry/sentry-go v0.27.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
@@ -35,6 +36,7 @@ require (
 	github.com/prometheus/procfs v0.9.0 // indirect
 	github.com/redis/go-redis/v9 v9.14.0 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
+	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df // indirect
 	golang.org/x/mod v0.27.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect

@@ -2,12 +2,12 @@ package session
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/pebble"
+	"github.com/fxamacker/cbor/v2"
 )
 
 var sessionPrefix = []byte("session:")
@@ -27,23 +27,23 @@ type PebbleStoreConfig struct {
 
 // sessionData is the serializable representation of a session
 type sessionData struct {
-	ClientID          string                     `json:"client_id"`
-	CleanStart        bool                       `json:"clean_start"`
-	State             State                      `json:"state"`
-	ExpiryInterval    uint32                     `json:"expiry_interval"`
-	CreatedAt         time.Time                  `json:"created_at"`
-	LastAccessedAt    time.Time                  `json:"last_accessed_at"`
-	DisconnectedAt    time.Time                  `json:"disconnected_at"`
-	WillMessage       *WillMessage               `json:"will_message,omitempty"`
-	WillDelayInterval uint32                     `json:"will_delay_interval"`
-	Subscriptions     map[string]*Subscription   `json:"subscriptions"`
-	PendingPublish    map[uint16]*PendingMessage `json:"pending_publish"`
-	PendingPubrel     map[uint16]bool            `json:"pending_pubrel"`
-	PendingPubcomp    map[uint16]bool            `json:"pending_pubcomp"`
-	NextPacketID      uint16                     `json:"next_packet_id"`
-	MaxPacketSize     uint32                     `json:"max_packet_size"`
-	ReceiveMaximum    uint16                     `json:"receive_maximum"`
-	ProtocolVersion   byte                       `json:"protocol_version"`
+	ClientID          string                     `cbor:"client_id"`
+	CleanStart        bool                       `cbor:"clean_start"`
+	State             State                      `cbor:"state"`
+	ExpiryInterval    uint32                     `cbor:"expiry_interval"`
+	CreatedAt         time.Time                  `cbor:"created_at"`
+	LastAccessedAt    time.Time                  `cbor:"last_accessed_at"`
+	DisconnectedAt    time.Time                  `cbor:"disconnected_at"`
+	WillMessage       *WillMessage               `cbor:"will_message,omitempty"`
+	WillDelayInterval uint32                     `cbor:"will_delay_interval"`
+	Subscriptions     map[string]*Subscription   `cbor:"subscriptions"`
+	PendingPublish    map[uint16]*PendingMessage `cbor:"pending_publish"`
+	PendingPubrel     map[uint16]bool            `cbor:"pending_pubrel"`
+	PendingPubcomp    map[uint16]bool            `cbor:"pending_pubcomp"`
+	NextPacketID      uint16                     `cbor:"next_packet_id"`
+	MaxPacketSize     uint32                     `cbor:"max_packet_size"`
+	ReceiveMaximum    uint16                     `cbor:"receive_maximum"`
+	ProtocolVersion   byte                       `cbor:"protocol_version"`
 }
 
 // NewPebbleStore creates a new Pebble-based session store
@@ -166,7 +166,7 @@ func (p *PebbleStore) Save(ctx context.Context, session *Session) error {
 	p.mu.RUnlock()
 
 	data := sessionToData(session)
-	value, err := json.Marshal(data)
+	value, err := cbor.Marshal(data)
 	if err != nil {
 		return err
 	}
@@ -199,7 +199,7 @@ func (p *PebbleStore) Load(ctx context.Context, clientID string) (*Session, erro
 	defer closer.Close()
 
 	var data sessionData
-	if err := json.Unmarshal(value, &data); err != nil {
+	if err := cbor.Unmarshal(value, &data); err != nil {
 		return nil, err
 	}
 
@@ -359,7 +359,7 @@ func (p *PebbleStore) CountByState(ctx context.Context, state State) (int64, err
 
 	for iter.First(); iter.Valid(); iter.Next() {
 		var data sessionData
-		if err := json.Unmarshal(iter.Value(), &data); err != nil {
+		if err := cbor.Unmarshal(iter.Value(), &data); err != nil {
 			continue
 		}
 		if data.State == state {
