@@ -93,16 +93,12 @@ func getConnFd(conn *Connection) (int, error) {
 		}
 
 		var fd int
-		var ctrlErr error
 		err = rawConn.Control(func(fdPtr uintptr) {
 			fd = int(fdPtr)
 		})
 
 		if err != nil {
 			return -1, err
-		}
-		if ctrlErr != nil {
-			return -1, ctrlErr
 		}
 
 		return fd, nil
