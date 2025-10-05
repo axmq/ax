@@ -859,3 +859,309 @@ func (id PropertyID) String() string {
 	}
 	return "UNKNOWN"
 }
+
+// PropertySerializer provides efficient, zero-allocation property serialization
+type PropertySerializer struct {
+	buf []byte
+}
+
+// NewPropertySerializer creates a new serializer with the given buffer
+func NewPropertySerializer(buf []byte) *PropertySerializer {
+	return &PropertySerializer{buf: buf}
+}
+
+// Serialize serializes properties directly to the internal buffer
+func (s *PropertySerializer) Serialize(props *Properties) (int, error) {
+	return props.EncodePropertiesToBytes(s.buf)
+}
+
+// Buffer returns the internal buffer
+func (s *PropertySerializer) Buffer() []byte {
+	return s.buf
+}
+
+// PropertyBuilder provides a fluent API for building properties efficiently
+type PropertyBuilder struct {
+	props Properties
+	err   error
+}
+
+// NewPropertyBuilder creates a new property builder
+func NewPropertyBuilder() *PropertyBuilder {
+	return &PropertyBuilder{
+		props: Properties{
+			Properties: make([]Property, 0, 4),
+		},
+	}
+}
+
+// WithPayloadFormat adds payload format indicator property
+func (b *PropertyBuilder) WithPayloadFormat(format byte) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropPayloadFormatIndicator, format)
+	}
+	return b
+}
+
+// WithMessageExpiry adds message expiry interval property
+func (b *PropertyBuilder) WithMessageExpiry(seconds uint32) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropMessageExpiryInterval, seconds)
+	}
+	return b
+}
+
+// WithContentType adds content type property
+func (b *PropertyBuilder) WithContentType(contentType string) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropContentType, contentType)
+	}
+	return b
+}
+
+// WithResponseTopic adds response topic property
+func (b *PropertyBuilder) WithResponseTopic(topic string) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropResponseTopic, topic)
+	}
+	return b
+}
+
+// WithCorrelationData adds correlation data property
+func (b *PropertyBuilder) WithCorrelationData(data []byte) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropCorrelationData, data)
+	}
+	return b
+}
+
+// WithSubscriptionIdentifier adds subscription identifier property (can be multiple)
+func (b *PropertyBuilder) WithSubscriptionIdentifier(id uint32) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropSubscriptionIdentifier, id)
+	}
+	return b
+}
+
+// WithSessionExpiry adds session expiry interval property
+func (b *PropertyBuilder) WithSessionExpiry(seconds uint32) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropSessionExpiryInterval, seconds)
+	}
+	return b
+}
+
+// WithAssignedClientID adds assigned client identifier property
+func (b *PropertyBuilder) WithAssignedClientID(clientID string) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropAssignedClientIdentifier, clientID)
+	}
+	return b
+}
+
+// WithServerKeepAlive adds server keep alive property
+func (b *PropertyBuilder) WithServerKeepAlive(keepAlive uint16) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropServerKeepAlive, keepAlive)
+	}
+	return b
+}
+
+// WithAuthenticationMethod adds authentication method property
+func (b *PropertyBuilder) WithAuthenticationMethod(method string) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropAuthenticationMethod, method)
+	}
+	return b
+}
+
+// WithAuthenticationData adds authentication data property
+func (b *PropertyBuilder) WithAuthenticationData(data []byte) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropAuthenticationData, data)
+	}
+	return b
+}
+
+// WithRequestProblemInfo adds request problem information property
+func (b *PropertyBuilder) WithRequestProblemInfo(request byte) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropRequestProblemInformation, request)
+	}
+	return b
+}
+
+// WithWillDelay adds will delay interval property
+func (b *PropertyBuilder) WithWillDelay(seconds uint32) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropWillDelayInterval, seconds)
+	}
+	return b
+}
+
+// WithRequestResponseInfo adds request response information property
+func (b *PropertyBuilder) WithRequestResponseInfo(request byte) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropRequestResponseInformation, request)
+	}
+	return b
+}
+
+// WithResponseInfo adds response information property
+func (b *PropertyBuilder) WithResponseInfo(info string) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropResponseInformation, info)
+	}
+	return b
+}
+
+// WithServerReference adds server reference property
+func (b *PropertyBuilder) WithServerReference(reference string) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropServerReference, reference)
+	}
+	return b
+}
+
+// WithReasonString adds reason string property
+func (b *PropertyBuilder) WithReasonString(reason string) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropReasonString, reason)
+	}
+	return b
+}
+
+// WithReceiveMaximum adds receive maximum property
+func (b *PropertyBuilder) WithReceiveMaximum(maximum uint16) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropReceiveMaximum, maximum)
+	}
+	return b
+}
+
+// WithTopicAliasMaximum adds topic alias maximum property
+func (b *PropertyBuilder) WithTopicAliasMaximum(maximum uint16) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropTopicAliasMaximum, maximum)
+	}
+	return b
+}
+
+// WithTopicAlias adds topic alias property
+func (b *PropertyBuilder) WithTopicAlias(alias uint16) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropTopicAlias, alias)
+	}
+	return b
+}
+
+// WithMaximumQoS adds maximum QoS property
+func (b *PropertyBuilder) WithMaximumQoS(qos byte) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropMaximumQoS, qos)
+	}
+	return b
+}
+
+// WithRetainAvailable adds retain available property
+func (b *PropertyBuilder) WithRetainAvailable(available byte) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropRetainAvailable, available)
+	}
+	return b
+}
+
+// WithUserProperty adds user property (can be multiple)
+func (b *PropertyBuilder) WithUserProperty(key, value string) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropUserProperty, UTF8Pair{Key: key, Value: value})
+	}
+	return b
+}
+
+// WithMaximumPacketSize adds maximum packet size property
+func (b *PropertyBuilder) WithMaximumPacketSize(size uint32) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropMaximumPacketSize, size)
+	}
+	return b
+}
+
+// WithWildcardSubscriptionAvailable adds wildcard subscription available property
+func (b *PropertyBuilder) WithWildcardSubscriptionAvailable(available byte) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropWildcardSubscriptionAvailable, available)
+	}
+	return b
+}
+
+// WithSubscriptionIdentifierAvailable adds subscription identifier available property
+func (b *PropertyBuilder) WithSubscriptionIdentifierAvailable(available byte) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropSubscriptionIdentifierAvailable, available)
+	}
+	return b
+}
+
+// WithSharedSubscriptionAvailable adds shared subscription available property
+func (b *PropertyBuilder) WithSharedSubscriptionAvailable(available byte) *PropertyBuilder {
+	if b.err == nil {
+		b.err = b.props.AddProperty(PropSharedSubscriptionAvailable, available)
+	}
+	return b
+}
+
+// Build returns the constructed properties and any error
+func (b *PropertyBuilder) Build() (*Properties, error) {
+	return &b.props, b.err
+}
+
+// CalculatePropertiesSize calculates the total size needed to encode properties
+func CalculatePropertiesSize(props *Properties) int {
+	length := props.calculateLength()
+	varIntSize := SizeVariableByteInteger(length)
+	return varIntSize + int(length)
+}
+
+// ValidateProperty validates a property value matches its specification
+func ValidateProperty(id PropertyID, value interface{}) error {
+	spec, ok := propertySpecs[id]
+	if !ok {
+		return ErrInvalidPropertyID
+	}
+
+	switch spec.Type {
+	case PropertyTypeByte:
+		if _, ok := value.(byte); !ok {
+			return ErrInvalidPropertyType
+		}
+	case PropertyTypeTwoByteInt:
+		if _, ok := value.(uint16); !ok {
+			return ErrInvalidPropertyType
+		}
+	case PropertyTypeFourByteInt:
+		if _, ok := value.(uint32); !ok {
+			return ErrInvalidPropertyType
+		}
+	case PropertyTypeVarInt:
+		if val, ok := value.(uint32); !ok || val > MaxVariableByteInteger {
+			return ErrInvalidPropertyType
+		}
+	case PropertyTypeUTF8String:
+		if _, ok := value.(string); !ok {
+			return ErrInvalidPropertyType
+		}
+	case PropertyTypeUTF8Pair:
+		if _, ok := value.(UTF8Pair); !ok {
+			return ErrInvalidPropertyType
+		}
+	case PropertyTypeBinaryData:
+		if _, ok := value.([]byte); !ok {
+			return ErrInvalidPropertyType
+		}
+	default:
+		return ErrInvalidPropertyType
+	}
+
+	return nil
+}
