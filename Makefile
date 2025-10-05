@@ -1,5 +1,6 @@
-.PHONY: test unit_test test_race integration_test
+.PHONY: test unit_test test_race integration_test test_all
 
+test_all: unit_test test_race integration_test
 
 unit_test:
 	go test ./... -v
