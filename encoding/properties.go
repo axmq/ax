@@ -8,7 +8,6 @@ import (
 type PropertyID byte
 
 const (
-	// Property IDs as defined in MQTT 5.0 specification section 2.2.2.2
 	PropPayloadFormatIndicator          PropertyID = 0x01
 	PropMessageExpiryInterval           PropertyID = 0x02
 	PropContentType                     PropertyID = 0x03
@@ -530,7 +529,11 @@ func readUTF8String(r io.Reader) (string, error) {
 		return "", ErrUnexpectedEOF
 	}
 
-	// TODO: Add UTF-8 validation
+	// Validate UTF-8 encoding
+	if err := ValidateUTF8String(buf); err != nil {
+		return "", err
+	}
+
 	return string(buf), nil
 }
 
@@ -550,10 +553,16 @@ func readUTF8StringFromBytes(data []byte) (string, int, error) {
 		return "", 0, ErrUnexpectedEOF
 	}
 
-	str := string(data[offset : offset+int(length)])
+	buf := data[offset : offset+int(length)]
+
+	// Validate UTF-8 encoding
+	if err := ValidateUTF8String(buf); err != nil {
+		return "", 0, err
+	}
+
+	str := string(buf)
 	offset += int(length)
 
-	// TODO: Add UTF-8 validation
 	return str, offset, nil
 }
 
@@ -704,7 +713,7 @@ func writeUTF8StringToBytes(buf []byte, value string) (int, error) {
 	offset += bytesWritten
 
 	if length > 0 {
-		copy(buf[offset:], []byte(value))
+		copy(buf[offset:], value)
 		offset += int(length)
 	}
 
@@ -738,14 +747,14 @@ func writeUTF8PairToBytes(buf []byte, value UTF8Pair) (int, error) {
 
 func writeBinaryData(w io.Writer, value []byte) error {
 	length := uint16(len(value))
-	if err := writeTwoByteInt(w, length); err != nil {
+	// Write length (2 bytes) + data
+	buf := make([]byte, 2+length)
+	_, err := writeBinaryDataToBytes(buf, value)
+	if err != nil {
 		return err
 	}
-	if length > 0 {
-		_, err := w.Write(value)
-		return err
-	}
-	return nil
+	_, err = w.Write(buf)
+	return err
 }
 
 func writeBinaryDataToBytes(buf []byte, value []byte) (int, error) {

@@ -35,4 +35,12 @@ var (
 	ErrInvalidPacketID        = errors.New("invalid packet identifier")
 	ErrInvalidReasonCode      = errors.New("invalid reason code")
 	ErrMalformedPacket        = errors.New("malformed packet")
+
+	// UTF-8 validation errors
+	ErrInvalidUTF8           = errors.New("invalid UTF-8 encoding")
+	ErrNullCharacter         = errors.New("null character (U+0000) not allowed in UTF-8 string")
+	ErrInvalidCodePoint      = errors.New("invalid Unicode code point")
+	ErrSurrogateCodePoint    = errors.New("UTF-16 surrogate code points (U+D800 to U+DFFF) not allowed")
+	ErrNonCharacterCodePoint = errors.New("non-character code points (U+FFFE, U+FFFF) not allowed")
+	ErrControlCharacter      = errors.New("control characters (U+0001 to U+001F, U+007F to U+009F) should be avoided")
 )
