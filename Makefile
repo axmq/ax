@@ -9,3 +9,7 @@ test:
 
 test_race:
 	go test ./... --race
+
+fmt:
+	@echo "Formatting code..."
+	@go tool gofumpt -l -w .
