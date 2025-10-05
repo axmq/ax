@@ -6,7 +6,7 @@ unit_test:
 	go test ./... -v
 
 test:
-	go test ./... -covermode=atomic
+	go test -covermode=atomic -v $(or $(path),./...)
 
 test_race:
 	go test ./... --race
