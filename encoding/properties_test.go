@@ -300,303 +300,618 @@ func TestProperties_AddProperty(t *testing.T) {
 
 func TestProperties_AddProperty_InvalidID(t *testing.T) {
 	props := &Properties{}
-
-	err := props.AddProperty(PropertyID(0xFF), byte(0))
+	err := props.AddProperty(PropertyID(0xFF), byte(1))
 	assert.ErrorIs(t, err, ErrInvalidPropertyID)
 }
 
 func TestPropertyID_String(t *testing.T) {
 	tests := []struct {
-		id       PropertyID
-		expected string
+		id   PropertyID
+		want string
 	}{
 		{PropPayloadFormatIndicator, "PayloadFormatIndicator"},
+		{PropMessageExpiryInterval, "MessageExpiryInterval"},
 		{PropContentType, "ContentType"},
 		{PropUserProperty, "UserProperty"},
 		{PropertyID(0xFF), "UNKNOWN"},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.expected, func(t *testing.T) {
-			assert.Equal(t, tt.expected, tt.id.String())
+		t.Run(tt.want, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.id.String())
 		})
 	}
 }
 
-func TestEncodeDecodeRoundTrip_AllPropertyTypes(t *testing.T) {
+func TestPropertySerializer(t *testing.T) {
 	props := &Properties{
 		Properties: []Property{
 			{ID: PropPayloadFormatIndicator, Value: byte(1)},
-			{ID: PropServerKeepAlive, Value: uint16(60)},
-			{ID: PropMessageExpiryInterval, Value: uint32(3600)},
-			{ID: PropSubscriptionIdentifier, Value: uint32(127)},
-			{ID: PropContentType, Value: "text/plain"},
-			{ID: PropUserProperty, Value: UTF8Pair{Key: "foo", Value: "bar"}},
-			{ID: PropCorrelationData, Value: []byte{0x01, 0x02, 0x03, 0x04}},
+			{ID: PropContentType, Value: "application/json"},
 		},
 	}
 
-	var buf bytes.Buffer
-	err := props.EncodeProperties(&buf)
+	buf := make([]byte, 256)
+	serializer := NewPropertySerializer(buf)
+
+	n, err := serializer.Serialize(props)
 	require.NoError(t, err)
+	assert.Greater(t, n, 0)
+	assert.Equal(t, buf, serializer.Buffer())
 
-	parsed, err := ParseProperties(&buf)
+	parsed, bytesRead, err := ParsePropertiesFromBytes(buf[:n])
 	require.NoError(t, err)
-	assert.Len(t, parsed.Properties, 7)
-
-	// Verify each property
-	assert.Equal(t, byte(1), parsed.Properties[0].Value)
-	assert.Equal(t, uint16(60), parsed.Properties[1].Value)
-	assert.Equal(t, uint32(3600), parsed.Properties[2].Value)
-	assert.Equal(t, uint32(127), parsed.Properties[3].Value)
-	assert.Equal(t, "text/plain", parsed.Properties[4].Value)
-
-	pair := parsed.Properties[5].Value.(UTF8Pair)
-	assert.Equal(t, "foo", pair.Key)
-	assert.Equal(t, "bar", pair.Value)
-
-	assert.Equal(t, []byte{0x01, 0x02, 0x03, 0x04}, parsed.Properties[6].Value)
+	assert.Equal(t, n, bytesRead)
+	assert.Len(t, parsed.Properties, 2)
 }
 
-func TestWriteUTF8StringToBytes(t *testing.T) {
+func TestPropertyBuilder(t *testing.T) {
 	tests := []struct {
-		name      string
-		bufSize   int
-		value     string
-		expected  []byte
-		expectedN int
-		expectErr bool
+		name          string
+		buildFunc     func(*PropertyBuilder) *PropertyBuilder
+		expectError   bool
+		expectedProps int
+		validate      func(*testing.T, *Properties)
 	}{
 		{
-			name:      "empty string",
-			bufSize:   2,
-			value:     "",
-			expected:  []byte{0x00, 0x00},
-			expectedN: 2,
+			name: "single_byte_property",
+			buildFunc: func(b *PropertyBuilder) *PropertyBuilder {
+				return b.WithPayloadFormat(1)
+			},
+			expectedProps: 1,
+			validate: func(t *testing.T, p *Properties) {
+				assert.Equal(t, PropPayloadFormatIndicator, p.Properties[0].ID)
+				assert.Equal(t, byte(1), p.Properties[0].Value)
+			},
 		},
 		{
-			name:      "simple string",
-			bufSize:   7,
-			value:     "hello",
-			expected:  []byte{0x00, 0x05, 'h', 'e', 'l', 'l', 'o'},
-			expectedN: 7,
+			name: "multiple_properties",
+			buildFunc: func(b *PropertyBuilder) *PropertyBuilder {
+				return b.
+					WithPayloadFormat(1).
+					WithMessageExpiry(3600).
+					WithContentType("application/json")
+			},
+			expectedProps: 3,
+			validate: func(t *testing.T, p *Properties) {
+				assert.Equal(t, PropPayloadFormatIndicator, p.Properties[0].ID)
+				assert.Equal(t, PropMessageExpiryInterval, p.Properties[1].ID)
+				assert.Equal(t, PropContentType, p.Properties[2].ID)
+			},
 		},
 		{
-			name:      "single char",
-			bufSize:   3,
-			value:     "a",
-			expected:  []byte{0x00, 0x01, 'a'},
-			expectedN: 3,
+			name: "user_properties",
+			buildFunc: func(b *PropertyBuilder) *PropertyBuilder {
+				return b.
+					WithUserProperty("key1", "value1").
+					WithUserProperty("key2", "value2")
+			},
+			expectedProps: 2,
+			validate: func(t *testing.T, p *Properties) {
+				assert.Equal(t, PropUserProperty, p.Properties[0].ID)
+				assert.Equal(t, PropUserProperty, p.Properties[1].ID)
+			},
 		},
 		{
-			name:      "unicode string",
-			bufSize:   5,
-			value:     "✓",
-			expected:  []byte{0x00, 0x03, 0xE2, 0x9C, 0x93},
-			expectedN: 5,
+			name: "all_property_types",
+			buildFunc: func(b *PropertyBuilder) *PropertyBuilder {
+				return b.
+					WithPayloadFormat(1).
+					WithMessageExpiry(3600).
+					WithContentType("text/plain").
+					WithResponseTopic("response/topic").
+					WithCorrelationData([]byte{1, 2, 3, 4}).
+					WithSubscriptionIdentifier(100).
+					WithSessionExpiry(7200).
+					WithAssignedClientID("client123").
+					WithServerKeepAlive(60).
+					WithAuthenticationMethod("SCRAM-SHA-256").
+					WithAuthenticationData([]byte{0xAA, 0xBB}).
+					WithRequestProblemInfo(1).
+					WithWillDelay(30).
+					WithRequestResponseInfo(1).
+					WithResponseInfo("some info").
+					WithServerReference("mqtt.example.com").
+					WithReasonString("Success").
+					WithReceiveMaximum(100).
+					WithTopicAliasMaximum(10).
+					WithTopicAlias(5).
+					WithMaximumQoS(2).
+					WithRetainAvailable(1).
+					WithUserProperty("app", "test").
+					WithMaximumPacketSize(65535).
+					WithWildcardSubscriptionAvailable(1).
+					WithSubscriptionIdentifierAvailable(1).
+					WithSharedSubscriptionAvailable(1)
+			},
+			expectedProps: 27,
 		},
 		{
-			name:      "large buffer",
-			bufSize:   10,
-			value:     "ab",
-			expected:  []byte{0x00, 0x02, 'a', 'b', 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
-			expectedN: 4,
+			name: "duplicate_non_multiple_property",
+			buildFunc: func(b *PropertyBuilder) *PropertyBuilder {
+				return b.
+					WithPayloadFormat(1).
+					WithPayloadFormat(0)
+			},
+			expectError: true,
 		},
 		{
-			name:      "buffer too small",
-			bufSize:   3,
-			value:     "hello",
-			expectErr: true,
-		},
-		{
-			name:      "empty buffer",
-			bufSize:   0,
-			value:     "test",
-			expectErr: true,
+			name: "empty_properties",
+			buildFunc: func(b *PropertyBuilder) *PropertyBuilder {
+				return b
+			},
+			expectedProps: 0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			buf := make([]byte, tt.bufSize)
-			n, err := writeUTF8StringToBytes(buf, tt.value)
-			if tt.expectErr {
-				assert.Error(t, err)
+			builder := NewPropertyBuilder()
+			builder = tt.buildFunc(builder)
+			props, err := builder.Build()
+
+			if tt.expectError {
+				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, tt.expectedN, n)
-				assert.Equal(t, tt.expected, buf)
+				assert.Len(t, props.Properties, tt.expectedProps)
+				if tt.validate != nil {
+					tt.validate(t, props)
+				}
 			}
 		})
 	}
 }
 
-func TestWriteBinaryData(t *testing.T) {
+func TestCalculatePropertiesSize(t *testing.T) {
 	tests := []struct {
 		name     string
-		value    []byte
-		expected []byte
+		props    *Properties
+		expected int
 	}{
 		{
-			name:     "empty binary",
-			value:    []byte{},
-			expected: []byte{0x00, 0x00},
+			name:     "empty_properties",
+			props:    &Properties{},
+			expected: 1,
 		},
 		{
-			name:     "simple binary",
-			value:    []byte{0x01, 0x02, 0x03},
-			expected: []byte{0x00, 0x03, 0x01, 0x02, 0x03},
+			name: "single_byte_property",
+			props: &Properties{
+				Properties: []Property{
+					{ID: PropPayloadFormatIndicator, Value: byte(1)},
+				},
+			},
+			expected: 3,
 		},
 		{
-			name:     "single byte binary",
-			value:    []byte{0xFF},
-			expected: []byte{0x00, 0x01, 0xFF},
+			name: "two_byte_int_property",
+			props: &Properties{
+				Properties: []Property{
+					{ID: PropServerKeepAlive, Value: uint16(60)},
+				},
+			},
+			expected: 4,
 		},
 		{
-			name:     "all zeros binary",
-			value:    []byte{0x00, 0x00, 0x00, 0x00},
-			expected: []byte{0x00, 0x04, 0x00, 0x00, 0x00, 0x00},
+			name: "four_byte_int_property",
+			props: &Properties{
+				Properties: []Property{
+					{ID: PropMessageExpiryInterval, Value: uint32(3600)},
+				},
+			},
+			expected: 6,
+		},
+		{
+			name: "string_property",
+			props: &Properties{
+				Properties: []Property{
+					{ID: PropContentType, Value: "text/plain"},
+				},
+			},
+			expected: 14,
+		},
+		{
+			name: "multiple_properties",
+			props: &Properties{
+				Properties: []Property{
+					{ID: PropPayloadFormatIndicator, Value: byte(1)},
+					{ID: PropMessageExpiryInterval, Value: uint32(3600)},
+					{ID: PropContentType, Value: "text/plain"},
+				},
+			},
+			expected: 21,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var buf bytes.Buffer
-			err := writeBinaryData(&buf, tt.value)
+			size := CalculatePropertiesSize(tt.props)
+			assert.Equal(t, tt.expected, size)
+		})
+	}
+}
+
+func TestValidateProperty(t *testing.T) {
+	tests := []struct {
+		name        string
+		id          PropertyID
+		value       interface{}
+		expectError bool
+	}{
+		{
+			name:        "valid_byte",
+			id:          PropPayloadFormatIndicator,
+			value:       byte(1),
+			expectError: false,
+		},
+		{
+			name:        "invalid_byte_type",
+			id:          PropPayloadFormatIndicator,
+			value:       uint16(1),
+			expectError: true,
+		},
+		{
+			name:        "valid_two_byte_int",
+			id:          PropServerKeepAlive,
+			value:       uint16(60),
+			expectError: false,
+		},
+		{
+			name:        "invalid_two_byte_int_type",
+			id:          PropServerKeepAlive,
+			value:       uint32(60),
+			expectError: true,
+		},
+		{
+			name:        "valid_four_byte_int",
+			id:          PropMessageExpiryInterval,
+			value:       uint32(3600),
+			expectError: false,
+		},
+		{
+			name:        "invalid_four_byte_int_type",
+			id:          PropMessageExpiryInterval,
+			value:       uint16(3600),
+			expectError: true,
+		},
+		{
+			name:        "valid_varint",
+			id:          PropSubscriptionIdentifier,
+			value:       uint32(127),
+			expectError: false,
+		},
+		{
+			name:        "invalid_varint_too_large",
+			id:          PropSubscriptionIdentifier,
+			value:       uint32(268435456),
+			expectError: true,
+		},
+		{
+			name:        "valid_utf8_string",
+			id:          PropContentType,
+			value:       "text/plain",
+			expectError: false,
+		},
+		{
+			name:        "invalid_utf8_string_type",
+			id:          PropContentType,
+			value:       []byte("text/plain"),
+			expectError: true,
+		},
+		{
+			name:        "valid_utf8_pair",
+			id:          PropUserProperty,
+			value:       UTF8Pair{Key: "key", Value: "value"},
+			expectError: false,
+		},
+		{
+			name:        "invalid_utf8_pair_type",
+			id:          PropUserProperty,
+			value:       "key=value",
+			expectError: true,
+		},
+		{
+			name:        "valid_binary_data",
+			id:          PropCorrelationData,
+			value:       []byte{1, 2, 3, 4},
+			expectError: false,
+		},
+		{
+			name:        "invalid_binary_data_type",
+			id:          PropCorrelationData,
+			value:       "binary",
+			expectError: true,
+		},
+		{
+			name:        "invalid_property_id",
+			id:          PropertyID(0xFF),
+			value:       byte(1),
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateProperty(tt.id, tt.value)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestPropertiesEncodeDecodeRoundtrip(t *testing.T) {
+	tests := []struct {
+		name       string
+		properties []Property
+	}{
+		{
+			name:       "empty",
+			properties: []Property{},
+		},
+		{
+			name: "all_property_types",
+			properties: []Property{
+				{ID: PropPayloadFormatIndicator, Value: byte(1)},
+				{ID: PropMessageExpiryInterval, Value: uint32(3600)},
+				{ID: PropContentType, Value: "application/json"},
+				{ID: PropResponseTopic, Value: "response/topic"},
+				{ID: PropCorrelationData, Value: []byte{0x01, 0x02, 0x03, 0x04}},
+				{ID: PropSubscriptionIdentifier, Value: uint32(100)},
+				{ID: PropSessionExpiryInterval, Value: uint32(7200)},
+				{ID: PropServerKeepAlive, Value: uint16(60)},
+				{ID: PropUserProperty, Value: UTF8Pair{Key: "app", Value: "test"}},
+				{ID: PropUserProperty, Value: UTF8Pair{Key: "version", Value: "1.0"}},
+			},
+		},
+		{
+			name: "large_varint",
+			properties: []Property{
+				{ID: PropSubscriptionIdentifier, Value: uint32(268435455)},
+			},
+		},
+		{
+			name: "empty_strings",
+			properties: []Property{
+				{ID: PropContentType, Value: ""},
+				{ID: PropResponseTopic, Value: ""},
+			},
+		},
+		{
+			name: "empty_binary",
+			properties: []Property{
+				{ID: PropCorrelationData, Value: []byte{}},
+			},
+		},
+		{
+			name: "long_strings",
+			properties: []Property{
+				{ID: PropContentType, Value: "application/vnd.oasis.opendocument.text"},
+				{ID: PropReasonString, Value: "This is a very long reason string that describes in detail what happened"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := &Properties{Properties: tt.properties}
+
+			buf := make([]byte, 4096)
+			n, err := original.EncodePropertiesToBytes(buf)
 			require.NoError(t, err)
-			assert.Equal(t, tt.expected, buf.Bytes())
-		})
-	}
-}
+			require.Greater(t, n, 0)
 
-func TestReadBinaryData(t *testing.T) {
-	tests := []struct {
-		name      string
-		data      []byte
-		expected  []byte
-		expectErr bool
-	}{
-		{
-			name:     "empty binary",
-			data:     []byte{0x00, 0x00},
-			expected: []byte{},
-		},
-		{
-			name:     "simple binary",
-			data:     []byte{0x00, 0x03, 0x01, 0x02, 0x03},
-			expected: []byte{0x01, 0x02, 0x03},
-		},
-		{
-			name:     "single byte binary",
-			data:     []byte{0x00, 0x01, 0xFF},
-			expected: []byte{0xFF},
-		},
-		{
-			name:     "all zeros binary",
-			data:     []byte{0x00, 0x04, 0x00, 0x00, 0x00, 0x00},
-			expected: []byte{0x00, 0x00, 0x00, 0x00},
-		},
-		{
-			name:      "incomplete length",
-			data:      []byte{0x00},
-			expectErr: true,
-		},
-		{
-			name:      "incomplete data",
-			data:      []byte{0x00, 0x05, 0x01, 0x02},
-			expectErr: true,
-		},
-		{
-			name:      "empty data",
-			data:      []byte{},
-			expectErr: true,
-		},
-	}
+			decoded, bytesRead, err := ParsePropertiesFromBytes(buf[:n])
+			require.NoError(t, err)
+			assert.Equal(t, n, bytesRead)
+			assert.Len(t, decoded.Properties, len(original.Properties))
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := bytes.NewReader(tt.data)
-			val, err := readBinaryData(r)
-			if tt.expectErr {
-				assert.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tt.expected, val)
+			for i, prop := range original.Properties {
+				assert.Equal(t, prop.ID, decoded.Properties[i].ID)
+				assert.Equal(t, prop.Value, decoded.Properties[i].Value)
 			}
 		})
 	}
 }
 
-func TestReadBinaryDataFromBytes(t *testing.T) {
+func TestEdgeCases(t *testing.T) {
 	tests := []struct {
-		name      string
-		data      []byte
-		expected  []byte
-		expectedN int
-		expectErr bool
+		name        string
+		testFunc    func(t *testing.T)
+		expectError bool
 	}{
 		{
-			name:      "empty binary",
-			data:      []byte{0x00, 0x00},
-			expected:  []byte{},
-			expectedN: 2,
+			name: "buffer_too_small",
+			testFunc: func(t *testing.T) {
+				props := &Properties{
+					Properties: []Property{
+						{ID: PropPayloadFormatIndicator, Value: byte(1)},
+					},
+				}
+				buf := make([]byte, 1)
+				_, err := props.EncodePropertiesToBytes(buf)
+				assert.ErrorIs(t, err, ErrBufferTooSmall)
+			},
 		},
 		{
-			name:      "simple binary",
-			data:      []byte{0x00, 0x03, 0x01, 0x02, 0x03},
-			expected:  []byte{0x01, 0x02, 0x03},
-			expectedN: 5,
+			name: "parse_truncated_property_length",
+			testFunc: func(t *testing.T) {
+				data := []byte{}
+				_, _, err := ParsePropertiesFromBytes(data)
+				assert.ErrorIs(t, err, ErrUnexpectedEOF)
+			},
 		},
 		{
-			name:      "single byte binary",
-			data:      []byte{0x00, 0x01, 0xFF},
-			expected:  []byte{0xFF},
-			expectedN: 3,
+			name: "parse_truncated_property_data",
+			testFunc: func(t *testing.T) {
+				data := []byte{0x05, 0x01}
+				_, _, err := ParsePropertiesFromBytes(data)
+				assert.Error(t, err)
+			},
 		},
 		{
-			name:      "all zeros binary",
-			data:      []byte{0x00, 0x04, 0x00, 0x00, 0x00, 0x00},
-			expected:  []byte{0x00, 0x00, 0x00, 0x00},
-			expectedN: 6,
+			name: "large_property_collection",
+			testFunc: func(t *testing.T) {
+				props := &Properties{Properties: []Property{}}
+				for i := 0; i < 100; i++ {
+					props.Properties = append(props.Properties, Property{
+						ID:    PropUserProperty,
+						Value: UTF8Pair{Key: "key", Value: "value"},
+					})
+				}
+
+				buf := make([]byte, 10000)
+				n, err := props.EncodePropertiesToBytes(buf)
+				require.NoError(t, err)
+
+				decoded, _, err := ParsePropertiesFromBytes(buf[:n])
+				require.NoError(t, err)
+				assert.Len(t, decoded.Properties, 100)
+			},
 		},
 		{
-			name:      "binary with extra bytes",
-			data:      []byte{0x00, 0x02, 0xAB, 0xCD, 0xFF, 0xFF},
-			expected:  []byte{0xAB, 0xCD},
-			expectedN: 4,
-		},
-		{
-			name:      "incomplete length",
-			data:      []byte{0x00},
-			expectErr: true,
-		},
-		{
-			name:      "incomplete data",
-			data:      []byte{0x00, 0x05, 0x01, 0x02},
-			expectErr: true,
-		},
-		{
-			name:      "empty data",
-			data:      []byte{},
-			expectErr: true,
+			name: "property_with_max_varint",
+			testFunc: func(t *testing.T) {
+				props := &Properties{
+					Properties: []Property{
+						{ID: PropSubscriptionIdentifier, Value: uint32(268435455)},
+					},
+				}
+
+				buf := make([]byte, 256)
+				n, err := props.EncodePropertiesToBytes(buf)
+				require.NoError(t, err)
+
+				decoded, _, err := ParsePropertiesFromBytes(buf[:n])
+				require.NoError(t, err)
+				assert.Equal(t, uint32(268435455), decoded.Properties[0].Value)
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			val, n, err := readBinaryDataFromBytes(tt.data)
-			if tt.expectErr {
-				assert.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tt.expected, val)
-				assert.Equal(t, tt.expectedN, n)
+			tt.testFunc(t)
+		})
+	}
+}
+
+func TestPropertiesGettersAndSetters(t *testing.T) {
+	props := &Properties{}
+
+	err := props.AddProperty(PropPayloadFormatIndicator, byte(1))
+	require.NoError(t, err)
+
+	err = props.AddProperty(PropContentType, "text/plain")
+	require.NoError(t, err)
+
+	err = props.AddProperty(PropUserProperty, UTF8Pair{Key: "k1", Value: "v1"})
+	require.NoError(t, err)
+
+	err = props.AddProperty(PropUserProperty, UTF8Pair{Key: "k2", Value: "v2"})
+	require.NoError(t, err)
+
+	prop := props.GetProperty(PropPayloadFormatIndicator)
+	require.NotNil(t, prop)
+	assert.Equal(t, byte(1), prop.Value)
+
+	prop = props.GetProperty(PropContentType)
+	require.NotNil(t, prop)
+	assert.Equal(t, "text/plain", prop.Value)
+
+	userProps := props.GetProperties(PropUserProperty)
+	assert.Len(t, userProps, 2)
+
+	prop = props.GetProperty(PropMessageExpiryInterval)
+	assert.Nil(t, prop)
+}
+
+func TestComplexPropertyCombinations(t *testing.T) {
+	tests := []struct {
+		name       string
+		properties []Property
+	}{
+		{
+			name: "connect_properties",
+			properties: []Property{
+				{ID: PropSessionExpiryInterval, Value: uint32(3600)},
+				{ID: PropReceiveMaximum, Value: uint16(100)},
+				{ID: PropMaximumPacketSize, Value: uint32(65535)},
+				{ID: PropTopicAliasMaximum, Value: uint16(10)},
+				{ID: PropRequestResponseInformation, Value: byte(1)},
+				{ID: PropRequestProblemInformation, Value: byte(1)},
+				{ID: PropUserProperty, Value: UTF8Pair{Key: "client", Value: "mqtt-test"}},
+				{ID: PropAuthenticationMethod, Value: "SCRAM-SHA-256"},
+				{ID: PropAuthenticationData, Value: []byte{0x01, 0x02, 0x03}},
+			},
+		},
+		{
+			name: "connack_properties",
+			properties: []Property{
+				{ID: PropSessionExpiryInterval, Value: uint32(7200)},
+				{ID: PropReceiveMaximum, Value: uint16(65535)},
+				{ID: PropMaximumQoS, Value: byte(2)},
+				{ID: PropRetainAvailable, Value: byte(1)},
+				{ID: PropMaximumPacketSize, Value: uint32(268435455)},
+				{ID: PropAssignedClientIdentifier, Value: "auto-generated-id"},
+				{ID: PropTopicAliasMaximum, Value: uint16(20)},
+				{ID: PropReasonString, Value: "Connection accepted"},
+				{ID: PropWildcardSubscriptionAvailable, Value: byte(1)},
+				{ID: PropSubscriptionIdentifierAvailable, Value: byte(1)},
+				{ID: PropSharedSubscriptionAvailable, Value: byte(1)},
+				{ID: PropServerKeepAlive, Value: uint16(120)},
+				{ID: PropResponseInformation, Value: "response/info"},
+				{ID: PropServerReference, Value: "mqtt.backup.example.com"},
+				{ID: PropAuthenticationMethod, Value: "SCRAM-SHA-256"},
+				{ID: PropAuthenticationData, Value: []byte{0xAA, 0xBB, 0xCC}},
+			},
+		},
+		{
+			name: "publish_properties",
+			properties: []Property{
+				{ID: PropPayloadFormatIndicator, Value: byte(1)},
+				{ID: PropMessageExpiryInterval, Value: uint32(3600)},
+				{ID: PropTopicAlias, Value: uint16(5)},
+				{ID: PropResponseTopic, Value: "response/topic"},
+				{ID: PropCorrelationData, Value: []byte{0x01, 0x02, 0x03, 0x04}},
+				{ID: PropUserProperty, Value: UTF8Pair{Key: "priority", Value: "high"}},
+				{ID: PropUserProperty, Value: UTF8Pair{Key: "source", Value: "sensor-1"}},
+				{ID: PropContentType, Value: "application/json"},
+			},
+		},
+		{
+			name: "subscribe_properties",
+			properties: []Property{
+				{ID: PropSubscriptionIdentifier, Value: uint32(1)},
+				{ID: PropUserProperty, Value: UTF8Pair{Key: "group", Value: "monitoring"}},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := &Properties{Properties: tt.properties}
+
+			buf := make([]byte, 4096)
+			n, err := original.EncodePropertiesToBytes(buf)
+			require.NoError(t, err)
+
+			decoded, bytesRead, err := ParsePropertiesFromBytes(buf[:n])
+			require.NoError(t, err)
+			assert.Equal(t, n, bytesRead)
+			assert.Len(t, decoded.Properties, len(original.Properties))
+
+			for i := range original.Properties {
+				assert.Equal(t, original.Properties[i].ID, decoded.Properties[i].ID)
+				assert.Equal(t, original.Properties[i].Value, decoded.Properties[i].Value)
 			}
 		})
 	}
 }
 
-func TestEncodeProperties_EmptyProperties(t *testing.T) {
+func TestProperties_EmptyProperties(t *testing.T) {
 	var buf bytes.Buffer
 	props := &Properties{}
 	err := props.EncodeProperties(&buf)
