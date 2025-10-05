@@ -110,6 +110,7 @@ func TestListenerMultipleConnections(t *testing.T) {
 
 	listener, err := NewListener(config, nil)
 	require.NoError(t, err)
+	require.NotNil(t, listener)
 
 	connCount := 0
 	listener.OnConnection(func(conn *Connection) error {
@@ -159,17 +160,29 @@ func TestListenerMaxConnections(t *testing.T) {
 
 	addr := listener.Addr().String()
 
+	// Keep connections open so they count against the limit
+	var conns []net.Conn
+	defer func() {
+		for _, conn := range conns {
+			if conn != nil {
+				conn.Close()
+			}
+		}
+	}()
+
+	// Connect more than max connections
 	for i := 0; i < 3; i++ {
 		conn, err := net.Dial("tcp", addr)
 		if err == nil {
-			defer conn.Close()
+			conns = append(conns, conn)
 		}
+		time.Sleep(50 * time.Millisecond) // Give time for connection to be processed
 	}
 
 	time.Sleep(100 * time.Millisecond)
 
 	stats := listener.Stats()
-	assert.True(t, stats.Rejected > 0)
+	assert.True(t, stats.Rejected > 0, "Expected at least one rejected connection")
 }
 
 func TestListenerOnConnectionError(t *testing.T) {
