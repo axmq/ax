@@ -749,11 +749,11 @@ func writeBinaryData(w io.Writer, value []byte) error {
 	length := uint16(len(value))
 	// Write length (2 bytes) + data
 	buf := make([]byte, 2+length)
-	_, err := writeBinaryDataToBytes(buf, value)
+	bytesWritten, err := writeBinaryDataToBytes(buf, value)
 	if err != nil {
 		return err
 	}
-	_, err = w.Write(buf)
+	_, err = w.Write(buf[:bytesWritten])
 	return err
 }
 
