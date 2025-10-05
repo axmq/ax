@@ -713,7 +713,7 @@ func writeUTF8StringToBytes(buf []byte, value string) (int, error) {
 	offset += bytesWritten
 
 	if length > 0 {
-		copy(buf[offset:], value)
+		copy(buf[offset:], []byte(value))
 		offset += int(length)
 	}
 
