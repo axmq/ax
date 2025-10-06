@@ -4,14 +4,19 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"sync"
 	"time"
+
+	"github.com/axmq/ax/store"
 )
+
+const _sessionKeyPrefix = "session:%s"
 
 // Manager manages session lifecycle, expiry, and recovery
 type Manager struct {
 	mu                sync.RWMutex
-	store             Store
+	store             store.Store[*Session]
 	activeSessions    map[string]*Session // clientID -> session for quick access
 	expiryCheckTicker *time.Ticker
 	stopCh            chan struct{}
@@ -27,7 +32,7 @@ type WillPublisher interface {
 
 // ManagerConfig configures the session manager
 type ManagerConfig struct {
-	Store               Store
+	Store               store.Store[*Session]
 	ExpiryCheckInterval time.Duration
 	WillPublisher       WillPublisher
 	AssignedIDPrefix    string
@@ -62,7 +67,7 @@ func (m *Manager) CreateSession(ctx context.Context, clientID string, cleanStart
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	existingSession, err := m.store.Load(ctx, clientID)
+	existingSession, err := m.store.Load(ctx, sessionStoreKey(clientID))
 	if err != nil && err != ErrSessionNotFound {
 		return nil, false, err
 	}
@@ -86,7 +91,9 @@ func (m *Manager) CreateSession(ctx context.Context, clientID string, cleanStart
 			sessionPresent = true
 		}
 		m.activeSessions[clientID] = existingSession
-		if err := m.store.Save(ctx, existingSession); err != nil {
+		if err := m.store.Save(ctx,
+			sessionStoreKey(existingSession.ClientID),
+			existingSession); err != nil {
 			return nil, false, err
 		}
 		return existingSession, sessionPresent, nil
@@ -97,7 +104,9 @@ func (m *Manager) CreateSession(ctx context.Context, clientID string, cleanStart
 	session.SetActive()
 	m.activeSessions[clientID] = session
 
-	if err := m.store.Save(ctx, session); err != nil {
+	if err := m.store.Save(ctx,
+		sessionStoreKey(session.ClientID),
+		session); err != nil {
 		delete(m.activeSessions, clientID)
 		return nil, false, err
 	}
@@ -114,7 +123,7 @@ func (m *Manager) GetSession(ctx context.Context, clientID string) (*Session, er
 	}
 	m.mu.RUnlock()
 
-	return m.store.Load(ctx, clientID)
+	return m.store.Load(ctx, sessionStoreKey(clientID))
 }
 
 // DisconnectSession marks a session as disconnected and handles will message
@@ -151,10 +160,10 @@ func (m *Manager) DisconnectSession(ctx context.Context, clientID string, sendWi
 	cleanStart := session.GetCleanStart()
 	expiryInterval := session.GetExpiryInterval()
 	if cleanStart || expiryInterval == 0 {
-		return m.store.Delete(ctx, clientID)
+		return m.store.Delete(ctx, sessionStoreKey(clientID))
 	}
 
-	return m.store.Save(ctx, session)
+	return m.store.Save(ctx, sessionStoreKey(session.ClientID), session)
 }
 
 // RemoveSession removes a session completely
@@ -163,7 +172,7 @@ func (m *Manager) RemoveSession(ctx context.Context, clientID string) error {
 	delete(m.activeSessions, clientID)
 	m.mu.Unlock()
 
-	return m.store.Delete(ctx, clientID)
+	return m.store.Delete(ctx, sessionStoreKey(clientID))
 }
 
 // TakeoverSession handles session takeover when a new connection uses an existing client ID
@@ -191,7 +200,7 @@ func (m *Manager) GenerateClientID(ctx context.Context) (string, error) {
 		}
 		clientID := m.assignedIDPrefix + hex.EncodeToString(b)
 
-		exists, err := m.store.Exists(ctx, clientID)
+		exists, err := m.store.Exists(ctx, sessionStoreKey(clientID))
 		if err != nil {
 			return "", err
 		}
@@ -227,7 +236,7 @@ func (m *Manager) checkExpiredSessions() {
 	}
 
 	for _, clientID := range clientIDs {
-		session, err := m.store.Load(ctx, clientID)
+		session, err := m.store.Load(ctx, sessionStoreKey(clientID))
 		if err != nil {
 			continue
 		}
@@ -242,7 +251,7 @@ func (m *Manager) checkExpiredSessions() {
 
 			// Remove expired session
 			session.SetExpired()
-			_ = m.store.Delete(ctx, clientID)
+			_ = m.store.Delete(ctx, sessionStoreKey(clientID))
 		} else if session.GetState() == StateDisconnected && session.WillMessage != nil {
 			// Check if delayed will should be published
 			if session.ShouldPublishWill() {
@@ -250,7 +259,7 @@ func (m *Manager) checkExpiredSessions() {
 					_ = m.willPublisher.PublishWill(ctx, session.WillMessage, clientID)
 				}
 				session.ClearWillMessage()
-				_ = m.store.Save(ctx, session)
+				_ = m.store.Save(ctx, sessionStoreKey(session.ClientID), session)
 			}
 		}
 	}
@@ -282,4 +291,8 @@ func (m *Manager) GetAllActiveSessions() []string {
 		clientIDs = append(clientIDs, clientID)
 	}
 	return clientIDs
+}
+
+func sessionStoreKey(clientID string) string {
+	return fmt.Sprintf(_sessionKeyPrefix, clientID)
 }

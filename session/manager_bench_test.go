@@ -3,10 +3,12 @@ package session
 import (
 	"context"
 	"testing"
+
+	"github.com/axmq/ax/store"
 )
 
 func BenchmarkManager_CreateSession(b *testing.B) {
-	manager := NewManager(ManagerConfig{Store: NewMemoryStore()})
+	manager := NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 	defer manager.Close()
 	ctx := context.Background()
 	b.ReportAllocs()
@@ -17,7 +19,7 @@ func BenchmarkManager_CreateSession(b *testing.B) {
 }
 
 func BenchmarkManager_GetSession(b *testing.B) {
-	manager := NewManager(ManagerConfig{Store: NewMemoryStore()})
+	manager := NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 	defer manager.Close()
 	ctx := context.Background()
 	_, _, _ = manager.CreateSession(ctx, "client1", true, 300, 5)
@@ -29,7 +31,7 @@ func BenchmarkManager_GetSession(b *testing.B) {
 }
 
 func BenchmarkManager_DisconnectSession(b *testing.B) {
-	manager := NewManager(ManagerConfig{Store: NewMemoryStore()})
+	manager := NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 	defer manager.Close()
 	ctx := context.Background()
 	b.ReportAllocs()
@@ -43,7 +45,7 @@ func BenchmarkManager_DisconnectSession(b *testing.B) {
 }
 
 func BenchmarkManager_GenerateClientID(b *testing.B) {
-	manager := NewManager(ManagerConfig{Store: NewMemoryStore()})
+	manager := NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 	defer manager.Close()
 	ctx := context.Background()
 	b.ReportAllocs()
@@ -54,7 +56,7 @@ func BenchmarkManager_GenerateClientID(b *testing.B) {
 }
 
 func BenchmarkManager_TakeoverSession(b *testing.B) {
-	manager := NewManager(ManagerConfig{Store: NewMemoryStore()})
+	manager := NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 	defer manager.Close()
 	ctx := context.Background()
 	_, _, _ = manager.CreateSession(ctx, "client1", true, 300, 5)
@@ -66,7 +68,7 @@ func BenchmarkManager_TakeoverSession(b *testing.B) {
 }
 
 func BenchmarkManager_ConcurrentCreateSession(b *testing.B) {
-	manager := NewManager(ManagerConfig{Store: NewMemoryStore()})
+	manager := NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 	defer manager.Close()
 	ctx := context.Background()
 	b.ReportAllocs()
@@ -79,7 +81,7 @@ func BenchmarkManager_ConcurrentCreateSession(b *testing.B) {
 }
 
 func BenchmarkManager_ConcurrentGetSession(b *testing.B) {
-	manager := NewManager(ManagerConfig{Store: NewMemoryStore()})
+	manager := NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 	defer manager.Close()
 	ctx := context.Background()
 	_, _, _ = manager.CreateSession(ctx, "client1", true, 300, 5)
@@ -93,7 +95,7 @@ func BenchmarkManager_ConcurrentGetSession(b *testing.B) {
 }
 
 func BenchmarkManager_SessionLifecycle(b *testing.B) {
-	manager := NewManager(ManagerConfig{Store: NewMemoryStore()})
+	manager := NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 	defer manager.Close()
 	ctx := context.Background()
 	b.ReportAllocs()
@@ -108,7 +110,7 @@ func BenchmarkManager_SessionLifecycle(b *testing.B) {
 }
 
 func BenchmarkManager_1000ActiveSessions(b *testing.B) {
-	manager := NewManager(ManagerConfig{Store: NewMemoryStore()})
+	manager := NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 	defer manager.Close()
 	ctx := context.Background()
 	for i := 0; i < 1000; i++ {
@@ -122,7 +124,7 @@ func BenchmarkManager_1000ActiveSessions(b *testing.B) {
 }
 
 func BenchmarkManager_GetAllActiveSessions(b *testing.B) {
-	manager := NewManager(ManagerConfig{Store: NewMemoryStore()})
+	manager := NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 	defer manager.Close()
 	ctx := context.Background()
 	for i := 0; i < 100; i++ {

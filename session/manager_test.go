@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/axmq/ax/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -47,13 +48,13 @@ func TestNewManager(t *testing.T) {
 		{
 			name: "create manager with defaults",
 			config: ManagerConfig{
-				Store: NewMemoryStore(),
+				Store: store.NewMemoryStore[*Session](),
 			},
 		},
 		{
 			name: "create manager with custom config",
 			config: ManagerConfig{
-				Store:               NewMemoryStore(),
+				Store:               store.NewMemoryStore[*Session](),
 				ExpiryCheckInterval: 10 * time.Second,
 				AssignedIDPrefix:    "custom-",
 			},
@@ -89,7 +90,7 @@ func TestManager_CreateSession(t *testing.T) {
 		{
 			name: "create new session",
 			setupManager: func() *Manager {
-				return NewManager(ManagerConfig{Store: NewMemoryStore()})
+				return NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 			},
 			clientID:        "client1",
 			cleanStart:      true,
@@ -101,7 +102,7 @@ func TestManager_CreateSession(t *testing.T) {
 		{
 			name: "resume existing session",
 			setupManager: func() *Manager {
-				m := NewManager(ManagerConfig{Store: NewMemoryStore()})
+				m := NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 				_, _, _ = m.CreateSession(context.Background(), "client1", false, 300, 5)
 				_ = m.DisconnectSession(context.Background(), "client1", false)
 				return m
@@ -116,7 +117,7 @@ func TestManager_CreateSession(t *testing.T) {
 		{
 			name: "clean start with existing session",
 			setupManager: func() *Manager {
-				m := NewManager(ManagerConfig{Store: NewMemoryStore()})
+				m := NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 				s, _, _ := m.CreateSession(context.Background(), "client1", false, 300, 5)
 				s.AddSubscription(&Subscription{TopicFilter: "test/topic", QoS: 1})
 				_ = m.DisconnectSession(context.Background(), "client1", false)
@@ -132,7 +133,7 @@ func TestManager_CreateSession(t *testing.T) {
 		{
 			name: "create session with clean start",
 			setupManager: func() *Manager {
-				return NewManager(ManagerConfig{Store: NewMemoryStore()})
+				return NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 			},
 			clientID:        "client2",
 			cleanStart:      true,
@@ -179,7 +180,7 @@ func TestManager_GetSession(t *testing.T) {
 		{
 			name: "get active session",
 			setupManager: func() *Manager {
-				m := NewManager(ManagerConfig{Store: NewMemoryStore()})
+				m := NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 				_, _, _ = m.CreateSession(context.Background(), "client1", true, 300, 5)
 				return m
 			},
@@ -189,7 +190,7 @@ func TestManager_GetSession(t *testing.T) {
 		{
 			name: "get disconnected session",
 			setupManager: func() *Manager {
-				m := NewManager(ManagerConfig{Store: NewMemoryStore()})
+				m := NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 				_, _, _ = m.CreateSession(context.Background(), "client1", false, 300, 5)
 				_ = m.DisconnectSession(context.Background(), "client1", false)
 				return m
@@ -200,7 +201,7 @@ func TestManager_GetSession(t *testing.T) {
 		{
 			name: "get non-existent session",
 			setupManager: func() *Manager {
-				return NewManager(ManagerConfig{Store: NewMemoryStore()})
+				return NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 			},
 			clientID:    "client1",
 			expectError: true,
@@ -237,7 +238,7 @@ func TestManager_DisconnectSession(t *testing.T) {
 		{
 			name: "disconnect without will",
 			setupManager: func() (*Manager, *mockWillPublisher) {
-				m := NewManager(ManagerConfig{Store: NewMemoryStore()})
+				m := NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 				_, _, _ = m.CreateSession(context.Background(), "client1", true, 300, 5)
 				return m, nil
 			},
@@ -251,7 +252,7 @@ func TestManager_DisconnectSession(t *testing.T) {
 			setupManager: func() (*Manager, *mockWillPublisher) {
 				wp := &mockWillPublisher{}
 				m := NewManager(ManagerConfig{
-					Store:         NewMemoryStore(),
+					Store:         store.NewMemoryStore[*Session](),
 					WillPublisher: wp,
 				})
 				s, _, _ := m.CreateSession(context.Background(), "client1", true, 300, 5)
@@ -271,7 +272,7 @@ func TestManager_DisconnectSession(t *testing.T) {
 			setupManager: func() (*Manager, *mockWillPublisher) {
 				wp := &mockWillPublisher{}
 				m := NewManager(ManagerConfig{
-					Store:         NewMemoryStore(),
+					Store:         store.NewMemoryStore[*Session](),
 					WillPublisher: wp,
 				})
 				s, _, _ := m.CreateSession(context.Background(), "client1", false, 300, 5)
@@ -289,7 +290,7 @@ func TestManager_DisconnectSession(t *testing.T) {
 		{
 			name: "disconnect clean start session",
 			setupManager: func() (*Manager, *mockWillPublisher) {
-				m := NewManager(ManagerConfig{Store: NewMemoryStore()})
+				m := NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 				_, _, _ = m.CreateSession(context.Background(), "client1", true, 300, 5)
 				return m, nil
 			},
@@ -323,7 +324,7 @@ func TestManager_DisconnectSession(t *testing.T) {
 }
 
 func TestManager_RemoveSession(t *testing.T) {
-	manager := NewManager(ManagerConfig{Store: NewMemoryStore()})
+	manager := NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 	defer manager.Close()
 
 	_, _, err := manager.CreateSession(context.Background(), "client1", true, 300, 5)
@@ -347,7 +348,7 @@ func TestManager_TakeoverSession(t *testing.T) {
 		{
 			name: "takeover existing session with will",
 			setupManager: func() *Manager {
-				m := NewManager(ManagerConfig{Store: NewMemoryStore()})
+				m := NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 				s, _, _ := m.CreateSession(context.Background(), "client1", true, 300, 5)
 				s.SetWillMessage(&WillMessage{
 					Topic:   "client/status",
@@ -361,7 +362,7 @@ func TestManager_TakeoverSession(t *testing.T) {
 		{
 			name: "takeover non-existent session",
 			setupManager: func() *Manager {
-				return NewManager(ManagerConfig{Store: NewMemoryStore()})
+				return NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 			},
 			clientID:    "client1",
 			expectError: false,
@@ -393,14 +394,14 @@ func TestManager_GenerateClientID(t *testing.T) {
 		{
 			name: "generate with default prefix",
 			config: ManagerConfig{
-				Store: NewMemoryStore(),
+				Store: store.NewMemoryStore[*Session](),
 			},
 			prefix: "auto-",
 		},
 		{
 			name: "generate with custom prefix",
 			config: ManagerConfig{
-				Store:            NewMemoryStore(),
+				Store:            store.NewMemoryStore[*Session](),
 				AssignedIDPrefix: "mqtt-",
 			},
 			prefix: "mqtt-",
@@ -424,7 +425,7 @@ func TestManager_GenerateClientID(t *testing.T) {
 func TestManager_ExpiryChecker(t *testing.T) {
 	wp := &mockWillPublisher{}
 	manager := NewManager(ManagerConfig{
-		Store:               NewMemoryStore(),
+		Store:               store.NewMemoryStore[*Session](),
 		ExpiryCheckInterval: 100 * time.Millisecond,
 		WillPublisher:       wp,
 	})
@@ -449,7 +450,7 @@ func TestManager_ExpiryChecker(t *testing.T) {
 func TestManager_DelayedWillPublish(t *testing.T) {
 	wp := &mockWillPublisher{}
 	manager := NewManager(ManagerConfig{
-		Store:               NewMemoryStore(),
+		Store:               store.NewMemoryStore[*Session](),
 		ExpiryCheckInterval: 100 * time.Millisecond,
 		WillPublisher:       wp,
 	})
@@ -475,7 +476,7 @@ func TestManager_DelayedWillPublish(t *testing.T) {
 }
 
 func TestManager_GetActiveSessionCount(t *testing.T) {
-	manager := NewManager(ManagerConfig{Store: NewMemoryStore()})
+	manager := NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 	defer manager.Close()
 
 	assert.Equal(t, 0, manager.GetActiveSessionCount())
@@ -489,7 +490,7 @@ func TestManager_GetActiveSessionCount(t *testing.T) {
 }
 
 func TestManager_GetAllActiveSessions(t *testing.T) {
-	manager := NewManager(ManagerConfig{Store: NewMemoryStore()})
+	manager := NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 	defer manager.Close()
 
 	_, _, _ = manager.CreateSession(context.Background(), "client1", true, 300, 5)
@@ -555,7 +556,7 @@ func TestManager_SessionRecovery(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manager := NewManager(ManagerConfig{Store: NewMemoryStore()})
+			manager := NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 			defer manager.Close()
 
 			originalSession := tt.setupSession(manager)
@@ -574,7 +575,7 @@ func TestManager_SessionRecovery(t *testing.T) {
 }
 
 func TestManager_ConcurrentOperations(t *testing.T) {
-	manager := NewManager(ManagerConfig{Store: NewMemoryStore()})
+	manager := NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 	defer manager.Close()
 
 	var wg sync.WaitGroup
@@ -597,7 +598,7 @@ func TestManager_ConcurrentOperations(t *testing.T) {
 }
 
 func TestManager_Close(t *testing.T) {
-	manager := NewManager(ManagerConfig{Store: NewMemoryStore()})
+	manager := NewManager(ManagerConfig{Store: store.NewMemoryStore[*Session]()})
 	_, _, _ = manager.CreateSession(context.Background(), "client1", true, 300, 5)
 
 	err := manager.Close()
