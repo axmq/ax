@@ -47,7 +47,7 @@ type Handler struct {
 	qos1Messages  map[uint16]*message.Message
 	qos2Messages  map[uint16]*message.Message
 	qos2Pubrel    map[uint16]struct{}
-	qos2Received  map[uint16]struct{}
+	qos2Received  map[uint16]time.Time
 	dedupCache    *dedupCache
 	nextPacketID  uint16
 	inflightCount int
@@ -82,7 +82,7 @@ func NewHandler(config *Config) *Handler {
 		qos1Messages: make(map[uint16]*message.Message),
 		qos2Messages: make(map[uint16]*message.Message),
 		qos2Pubrel:   make(map[uint16]struct{}),
-		qos2Received: make(map[uint16]struct{}),
+		qos2Received: make(map[uint16]time.Time),
 		nextPacketID: 1,
 		callbacks:    &callbacks{},
 		ctx:          ctx,
@@ -228,7 +228,7 @@ func (h *Handler) handleQoS2Publish(msg *message.Message) error {
 		return h.sendPubrec(msg.PacketID)
 	}
 
-	h.qos2Received[msg.PacketID] = struct{}{}
+	h.qos2Received[msg.PacketID] = time.Now()
 
 	if h.config.EnableDedup {
 		h.dedupCache.add(msg.PacketID)
@@ -356,41 +356,16 @@ func (h *Handler) HandlePubcomp(packetID uint16) error {
 
 // PublishQoS1 publishes a message with QoS 1 (at-least-once)
 func (h *Handler) PublishQoS1(topic string, payload []byte, retain bool, properties map[string]interface{}) (uint16, error) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	if h.closed {
-		return 0, ErrHandlerClosed
-	}
-
-	if h.inflightCount >= int(h.config.MaxInflight) {
-		return 0, ErrQueueFull
-	}
-
-	packetID := h.allocatePacketID()
-	msg := message.NewMessage(packetID, topic, payload, encoding.QoS1, retain, properties)
-
-	if msg.IsExpired() {
-		return 0, ErrMessageExpired
-	}
-
-	h.qos1Messages[packetID] = msg
-	h.inflightCount++
-
-	msg.MarkAttempt()
-	if h.callbacks.onPublish != nil {
-		if err := h.callbacks.onPublish(msg); err != nil {
-			delete(h.qos1Messages, packetID)
-			h.inflightCount--
-			return 0, err
-		}
-	}
-
-	return packetID, nil
+	return h.publishWithQoS(topic, payload, retain, properties, encoding.QoS1)
 }
 
 // PublishQoS2 publishes a message with QoS 2 (exactly-once)
 func (h *Handler) PublishQoS2(topic string, payload []byte, retain bool, properties map[string]interface{}) (uint16, error) {
+	return h.publishWithQoS(topic, payload, retain, properties, encoding.QoS2)
+}
+
+// publishWithQoS is a helper function that handles publishing for both QoS 1 and QoS 2
+func (h *Handler) publishWithQoS(topic string, payload []byte, retain bool, properties map[string]interface{}, qos encoding.QoS) (uint16, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -403,19 +378,29 @@ func (h *Handler) PublishQoS2(topic string, payload []byte, retain bool, propert
 	}
 
 	packetID := h.allocatePacketID()
-	msg := message.NewMessage(packetID, topic, payload, encoding.QoS2, retain, properties)
+	msg := message.NewMessage(packetID, topic, payload, qos, retain, properties)
 
 	if msg.IsExpired() {
 		return 0, ErrMessageExpired
 	}
 
-	h.qos2Messages[packetID] = msg
+	// Store in appropriate map based on QoS level
+	if qos == encoding.QoS1 {
+		h.qos1Messages[packetID] = msg
+	} else {
+		h.qos2Messages[packetID] = msg
+	}
 	h.inflightCount++
 
 	msg.MarkAttempt()
 	if h.callbacks.onPublish != nil {
 		if err := h.callbacks.onPublish(msg); err != nil {
-			delete(h.qos2Messages, packetID)
+			// Clean up on error
+			if qos == encoding.QoS1 {
+				delete(h.qos1Messages, packetID)
+			} else {
+				delete(h.qos2Messages, packetID)
+			}
 			h.inflightCount--
 			return 0, err
 		}
@@ -515,9 +500,15 @@ func (h *Handler) retryMessages() {
 
 	now := time.Now()
 
-	for packetID, msg := range h.qos1Messages {
+	h.retryMessagesInMap(h.qos1Messages, now)
+	h.retryMessagesInMap(h.qos2Messages, now)
+}
+
+// retryMessagesInMap retries messages in a given map (must be called with lock held)
+func (h *Handler) retryMessagesInMap(messages map[uint16]*message.Message, now time.Time) {
+	for packetID, msg := range messages {
 		if msg.IsExpired() {
-			delete(h.qos1Messages, packetID)
+			delete(messages, packetID)
 			h.inflightCount--
 			if h.callbacks.onExpired != nil {
 				h.callbacks.onExpired(msg)
@@ -528,35 +519,7 @@ func (h *Handler) retryMessages() {
 		retryInterval := h.calculateRetryInterval(msg.AttemptCount)
 		if now.Sub(msg.LastAttemptAt) >= retryInterval {
 			if msg.AttemptCount >= h.config.MaxRetries {
-				delete(h.qos1Messages, packetID)
-				h.inflightCount--
-				if h.callbacks.onMaxRetry != nil {
-					h.callbacks.onMaxRetry(msg)
-				}
-				continue
-			}
-
-			msg.MarkAttempt()
-			if h.callbacks.onPublish != nil {
-				h.callbacks.onPublish(msg)
-			}
-		}
-	}
-
-	for packetID, msg := range h.qos2Messages {
-		if msg.IsExpired() {
-			delete(h.qos2Messages, packetID)
-			h.inflightCount--
-			if h.callbacks.onExpired != nil {
-				h.callbacks.onExpired(msg)
-			}
-			continue
-		}
-
-		retryInterval := h.calculateRetryInterval(msg.AttemptCount)
-		if now.Sub(msg.LastAttemptAt) >= retryInterval {
-			if msg.AttemptCount >= h.config.MaxRetries {
-				delete(h.qos2Messages, packetID)
+				delete(messages, packetID)
 				h.inflightCount--
 				if h.callbacks.onMaxRetry != nil {
 					h.callbacks.onMaxRetry(msg)
@@ -615,29 +578,12 @@ func (h *Handler) cleanup() {
 
 	now := time.Now()
 
-	for packetID, msg := range h.qos1Messages {
-		if msg.IsExpired() {
-			delete(h.qos1Messages, packetID)
-			h.inflightCount--
-			if h.callbacks.onExpired != nil {
-				h.callbacks.onExpired(msg)
-			}
-		}
-	}
+	h.cleanupExpiredMessages(h.qos1Messages)
+	h.cleanupExpiredMessages(h.qos2Messages)
 
-	for packetID, msg := range h.qos2Messages {
-		if msg.IsExpired() {
-			delete(h.qos2Messages, packetID)
-			h.inflightCount--
-			if h.callbacks.onExpired != nil {
-				h.callbacks.onExpired(msg)
-			}
-		}
-	}
-
-	for packetID := range h.qos2Received {
+	for packetID, receivedAt := range h.qos2Received {
 		if len(h.qos2Received) > h.config.DedupCleanupCount {
-			if now.Sub(time.Now()) > h.config.AckTimeout {
+			if now.Sub(receivedAt) > h.config.AckTimeout {
 				delete(h.qos2Received, packetID)
 			}
 		}
@@ -645,6 +591,19 @@ func (h *Handler) cleanup() {
 
 	if h.config.EnableDedup && h.dedupCache != nil {
 		h.dedupCache.cleanup()
+	}
+}
+
+// cleanupExpiredMessages removes expired messages from a given map (must be called with lock held)
+func (h *Handler) cleanupExpiredMessages(messages map[uint16]*message.Message) {
+	for packetID, msg := range messages {
+		if msg.IsExpired() {
+			delete(messages, packetID)
+			h.inflightCount--
+			if h.callbacks.onExpired != nil {
+				h.callbacks.onExpired(msg)
+			}
+		}
 	}
 }
 
