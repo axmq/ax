@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -127,7 +128,7 @@ func (r *RedisStore[T]) Load(ctx context.Context, key string) (T, error) {
 	fullKey := r.makeKey(key)
 	data, err := r.client.Get(ctx, fullKey).Result()
 	if err != nil {
-		if err == redis.Nil {
+		if errors.Is(err, redis.Nil) {
 			return zero, ErrNotFound
 		}
 		return zero, fmt.Errorf("failed to load value: %w", err)
