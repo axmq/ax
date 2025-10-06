@@ -335,7 +335,7 @@ func TestManager_RemoveSession(t *testing.T) {
 
 	_, err = manager.GetSession(context.Background(), "client1")
 	assert.Error(t, err)
-	assert.Equal(t, ErrSessionNotFound, err)
+	assert.ErrorIs(t, err, store.ErrNotFound)
 }
 
 func TestManager_TakeoverSession(t *testing.T) {

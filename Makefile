@@ -12,7 +12,7 @@ test_race:
 	go test ./... --race
 
 integration_test:
-	go test -tags=integration ./... -v
+	go test -covermode=atomic -tags=integration ./... -v
 
 fmt:
 	@echo "Formatting code..."

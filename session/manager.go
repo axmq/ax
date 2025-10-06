@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -68,7 +69,7 @@ func (m *Manager) CreateSession(ctx context.Context, clientID string, cleanStart
 	defer m.mu.Unlock()
 
 	existingSession, err := m.store.Load(ctx, sessionStoreKey(clientID))
-	if err != nil && err != ErrSessionNotFound {
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return nil, false, err
 	}
 
@@ -179,7 +180,7 @@ func (m *Manager) RemoveSession(ctx context.Context, clientID string) error {
 func (m *Manager) TakeoverSession(ctx context.Context, clientID string) error {
 	session, err := m.GetSession(ctx, clientID)
 	if err != nil {
-		if err == ErrSessionNotFound {
+		if errors.Is(err, store.ErrNotFound) {
 			return nil
 		}
 		return err
@@ -230,13 +231,13 @@ func (m *Manager) expiryChecker() {
 func (m *Manager) checkExpiredSessions() {
 	ctx := context.Background()
 
-	clientIDs, err := m.store.List(ctx)
+	keys, err := m.store.List(ctx)
 	if err != nil {
 		return
 	}
 
-	for _, clientID := range clientIDs {
-		session, err := m.store.Load(ctx, sessionStoreKey(clientID))
+	for _, key := range keys {
+		session, err := m.store.Load(ctx, key)
 		if err != nil {
 			continue
 		}
@@ -245,21 +246,21 @@ func (m *Manager) checkExpiredSessions() {
 			// Publish delayed will message if present
 			if session.WillMessage != nil && session.ShouldPublishWill() {
 				if m.willPublisher != nil {
-					_ = m.willPublisher.PublishWill(ctx, session.WillMessage, clientID)
+					_ = m.willPublisher.PublishWill(ctx, session.WillMessage, session.ClientID)
 				}
 			}
 
 			// Remove expired session
 			session.SetExpired()
-			_ = m.store.Delete(ctx, sessionStoreKey(clientID))
+			_ = m.store.Delete(ctx, key)
 		} else if session.GetState() == StateDisconnected && session.WillMessage != nil {
 			// Check if delayed will should be published
 			if session.ShouldPublishWill() {
 				if m.willPublisher != nil {
-					_ = m.willPublisher.PublishWill(ctx, session.WillMessage, clientID)
+					_ = m.willPublisher.PublishWill(ctx, session.WillMessage, session.ClientID)
 				}
 				session.ClearWillMessage()
-				_ = m.store.Save(ctx, sessionStoreKey(session.ClientID), session)
+				_ = m.store.Save(ctx, key, session)
 			}
 		}
 	}
