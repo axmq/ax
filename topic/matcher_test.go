@@ -101,7 +101,7 @@ func TestTopicMatcher_Match(t *testing.T) {
 			name:      "dollar prefix no match with wildcard",
 			filter:    "#",
 			topic:     "$SYS/broker/clients",
-			wantMatch: true,
+			wantMatch: false,
 		},
 		{
 			name:      "single level at start",
