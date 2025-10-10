@@ -65,6 +65,10 @@ func (h *RateLimitHook) Stop() error {
 
 // OnPublish checks if the client has exceeded the rate limit
 func (h *RateLimitHook) OnPublish(client *Client, _ *PublishPacket) error {
+	if client == nil {
+		return ErrRatelimitClientNil
+	}
+
 	h.mu.Lock()
 	defer h.mu.Unlock()
 

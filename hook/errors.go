@@ -10,4 +10,5 @@ var (
 	ErrClientRateLimitExceeded = errors.New("client rate limit exceeded")
 	ErrGlobalRateLimitExceeded = errors.New("global rate limit exceeded")
 	ErrTopicRateLimitExceeded  = errors.New("topic rate limit exceeded")
+	ErrRatelimitClientNil      = errors.New("ratelimit hook: client is nil")
 )
