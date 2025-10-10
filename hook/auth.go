@@ -137,7 +137,7 @@ func (h *AnonymousAuthHook) OnConnectAuthenticate(client *Client, packet *Connec
 	allow := h.allowAnonymous
 	h.mu.RUnlock()
 
-	if packet.Username == "" && packet.Password == nil {
+	if packet.Username == "" && len(packet.Password) == 0 {
 		return allow
 	}
 
