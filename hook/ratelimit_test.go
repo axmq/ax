@@ -247,7 +247,7 @@ func TestMultiLevelRateLimitHookPerClient(t *testing.T) {
 	}
 
 	err := hook.OnPublish(client, packet)
-	assert.ErrorIs(t, err, ErrRateLimitExceeded)
+	assert.ErrorIs(t, err, ErrClientRateLimitExceeded)
 }
 
 func TestMultiLevelRateLimitHookPerTopic(t *testing.T) {
@@ -305,7 +305,7 @@ func TestMultiLevelRateLimitHookAllLevels(t *testing.T) {
 		assert.NoError(t, hook.OnPublish(client1, packet1))
 	}
 	// 4th attempt exceeds client limit
-	assert.ErrorIs(t, hook.OnPublish(client1, packet1), ErrRateLimitExceeded)
+	assert.ErrorIs(t, hook.OnPublish(client1, packet1), ErrClientRateLimitExceeded)
 
 	// Client1 can publish 2 more times to topic2 (topic1 already has 3, limit is 5)
 	for i := 0; i < 2; i++ {
@@ -365,7 +365,7 @@ func TestMultiLevelRateLimitHookResetAll(t *testing.T) {
 		assert.NoError(t, hook.OnPublish(client, packet))
 	}
 
-	assert.ErrorIs(t, hook.OnPublish(client, packet), ErrRateLimitExceeded)
+	assert.ErrorIs(t, hook.OnPublish(client, packet), ErrClientRateLimitExceeded)
 
 	hook.ResetAll()
 
@@ -384,7 +384,7 @@ func TestMultiLevelRateLimitHookWindowReset(t *testing.T) {
 		assert.NoError(t, hook.OnPublish(client, packet))
 	}
 
-	assert.ErrorIs(t, hook.OnPublish(client, packet), ErrRateLimitExceeded)
+	assert.ErrorIs(t, hook.OnPublish(client, packet), ErrClientRateLimitExceeded)
 
 	time.Sleep(150 * time.Millisecond)
 
@@ -427,7 +427,7 @@ func TestMultiLevelRateLimitHookWithManager(t *testing.T) {
 
 	assert.NoError(t, manager.OnPublish(client1, packet))
 	assert.NoError(t, manager.OnPublish(client1, packet))
-	assert.ErrorIs(t, manager.OnPublish(client1, packet), ErrRateLimitExceeded)
+	assert.ErrorIs(t, manager.OnPublish(client1, packet), ErrClientRateLimitExceeded)
 
 	assert.NoError(t, manager.OnPublish(client2, packet))
 	assert.ErrorIs(t, manager.OnPublish(client2, packet), ErrTopicRateLimitExceeded)

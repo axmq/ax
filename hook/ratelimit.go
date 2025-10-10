@@ -243,15 +243,15 @@ func (h *MultiLevelRateLimitHook) OnPublish(client *Client, packet *PublishPacke
 
 	// Check per-client limit
 	if h.perClientLimit > 0 {
-		if err := h.checkLimit(client.ID, h.perClientLimit, now, h.clientLimiters); err != nil {
+		if err := h.checkLimit(client.ID, h.perClientLimit, now, h.clientLimiters, ErrClientRateLimitExceeded); err != nil {
 			return err
 		}
 	}
 
 	// Check per-topic limit
 	if h.perTopicLimit > 0 {
-		if err := h.checkLimit(packet.Topic, h.perTopicLimit, now, h.topicLimiters); err != nil {
-			return ErrTopicRateLimitExceeded
+		if err := h.checkLimit(packet.Topic, h.perTopicLimit, now, h.topicLimiters, ErrTopicRateLimitExceeded); err != nil {
+			return err
 		}
 	}
 
@@ -259,7 +259,7 @@ func (h *MultiLevelRateLimitHook) OnPublish(client *Client, packet *PublishPacke
 }
 
 // checkLimit checks and updates a specific limit
-func (h *MultiLevelRateLimitHook) checkLimit(key string, maxRate int, now time.Time, limiters map[string]*rateLimiter) error {
+func (h *MultiLevelRateLimitHook) checkLimit(key string, maxRate int, now time.Time, limiters map[string]*rateLimiter, errType error) error {
 	limiter, exists := limiters[key]
 
 	if !exists || now.Sub(limiter.windowStart) > h.window {
@@ -275,7 +275,7 @@ func (h *MultiLevelRateLimitHook) checkLimit(key string, maxRate int, now time.T
 	limiter.count++
 
 	if limiter.count > maxRate {
-		return ErrRateLimitExceeded
+		return errType
 	}
 
 	return nil
