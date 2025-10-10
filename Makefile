@@ -1,4 +1,5 @@
 .PHONY: test unit_test test_race integration_test test_all
+.PHONY: fmt
 
 test_all: unit_test test_race integration_test
 
