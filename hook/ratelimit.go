@@ -5,9 +5,15 @@ import (
 	"time"
 )
 
-// expiryWindowMultiplier defines how many window periods to wait before cleaning up inactive rate limiters.
-// A limiter is considered inactive if it hasn't been accessed for (window * expiryWindowMultiplier).
-const expiryWindowMultiplier = 3
+const (
+	// _defaultExpiryWindowMultiplier defines how many window periods to wait before cleaning up inactive rate limiters.
+	// A limiter is considered inactive if it hasn't been accessed for (window * _defaultExpiryWindowMultiplier).
+	_defaultExpiryWindowMultiplier = 3
+	// _defaultCleanupInterval defines how often the cleanup process runs to remove old limiters.
+	// It should be at least as long as the window duration to ensure proper cleanup.
+	// This value is overridden in the startCleanup method based on the window duration.
+	_defaultCleanupInterval = 2
+)
 
 // RateLimitHook provides rate limiting for MQTT operations
 type RateLimitHook struct {
@@ -149,7 +155,7 @@ func (h *RateLimitHook) ActiveClients() int {
 
 // startCleanup starts a background goroutine to clean up old limiters
 func (h *RateLimitHook) startCleanup() {
-	cleanupInterval := h.window * 2
+	cleanupInterval := h.window * _defaultCleanupInterval
 	if cleanupInterval < time.Minute {
 		cleanupInterval = time.Minute
 	}
@@ -166,7 +172,7 @@ func (h *RateLimitHook) cleanup() {
 	defer h.mu.Unlock()
 
 	now := time.Now()
-	expiry := h.window * expiryWindowMultiplier
+	expiry := h.window * _defaultExpiryWindowMultiplier
 
 	for clientID, limiter := range h.limiters {
 		if now.Sub(limiter.lastAccess) > expiry {
@@ -327,7 +333,7 @@ func (h *MultiLevelRateLimitHook) ResetAll() {
 
 // startCleanup starts background cleanup
 func (h *MultiLevelRateLimitHook) startCleanup() {
-	cleanupInterval := h.window * 2
+	cleanupInterval := h.window * _defaultCleanupInterval
 	if cleanupInterval < time.Minute {
 		cleanupInterval = time.Minute
 	}
@@ -344,7 +350,7 @@ func (h *MultiLevelRateLimitHook) cleanup() {
 	defer h.mu.Unlock()
 
 	now := time.Now()
-	expiry := h.window * expiryWindowMultiplier
+	expiry := h.window * _defaultExpiryWindowMultiplier
 
 	for key, limiter := range h.clientLimiters {
 		if now.Sub(limiter.lastAccess) > expiry {
