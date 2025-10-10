@@ -3,6 +3,8 @@ package topic
 import (
 	"sync"
 	"sync/atomic"
+
+	"github.com/axmq/ax/types/message"
 )
 
 // Subscription represents an active subscription with all MQTT 5.0 features
@@ -15,6 +17,12 @@ type Subscription struct {
 	RetainHandling         byte
 	SubscriptionIdentifier uint32
 	SharedGroup            string // For shared subscriptions ($share/groupname/topic)
+}
+
+// RetainedMessage represents a retained message with its topic
+type RetainedMessage struct {
+	Topic   string
+	Message *message.Message
 }
 
 // SubscriberInfo contains subscriber metadata for routing
