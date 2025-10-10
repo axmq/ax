@@ -1,19 +1,33 @@
 package topic
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 // Router manages topic subscriptions and routes messages to subscribers
 type Router struct {
-	trie          *Trie
-	subscriptions map[string]map[string]*Subscription // clientID -> filter -> Subscription
-	mu            sync.RWMutex
+	trie            *Trie
+	subscriptions   map[string]map[string]*Subscription // clientID -> filter -> Subscription
+	retainedManager *RetainedManager
+	mu              sync.RWMutex
 }
 
 // NewRouter creates a new topic router
 func NewRouter() *Router {
 	return &Router{
-		trie:          NewTrie(),
-		subscriptions: make(map[string]map[string]*Subscription),
+		trie:            NewTrie(),
+		subscriptions:   make(map[string]map[string]*Subscription),
+		retainedManager: NewRetainedManager(nil),
+	}
+}
+
+// NewRouterWithRetainedConfig creates a new router with custom retained message config
+func NewRouterWithRetainedConfig(config *RetainedConfig) *Router {
+	return &Router{
+		trie:            NewTrie(),
+		subscriptions:   make(map[string]map[string]*Subscription),
+		retainedManager: NewRetainedManager(config),
 	}
 }
 
@@ -213,4 +227,41 @@ func (r *Router) Clear() {
 	r.subscriptions = make(map[string]map[string]*Subscription)
 	r.mu.Unlock()
 	r.trie.Clear()
+}
+
+// SetRetainedMessage stores a retained message for a topic
+func (r *Router) SetRetainedMessage(ctx context.Context, msg *RetainedMessage) error {
+	return r.retainedManager.Set(ctx, msg.Message.Topic, msg.Message)
+}
+
+// GetRetainedMessages retrieves retained messages matching a topic filter
+func (r *Router) GetRetainedMessages(ctx context.Context, topicFilter string) ([]*RetainedMessage, error) {
+	matcher := NewTopicMatcher()
+	messages, err := r.retainedManager.Match(ctx, topicFilter, matcher)
+	if err != nil {
+		return nil, err
+	}
+
+	retained := make([]*RetainedMessage, 0, len(messages))
+	for _, msg := range messages {
+		retained = append(retained, &RetainedMessage{
+			Message: msg,
+		})
+	}
+	return retained, nil
+}
+
+// DeleteRetainedMessage removes a retained message for a topic
+func (r *Router) DeleteRetainedMessage(ctx context.Context, topic string) error {
+	return r.retainedManager.Delete(ctx, topic)
+}
+
+// RetainedMessageCount returns the number of retained messages
+func (r *Router) RetainedMessageCount(ctx context.Context) (int64, error) {
+	return r.retainedManager.Count(ctx)
+}
+
+// Close closes the router and releases resources
+func (r *Router) Close() error {
+	return r.retainedManager.Close()
 }

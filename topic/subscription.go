@@ -3,6 +3,8 @@ package topic
 import (
 	"sync"
 	"sync/atomic"
+
+	"github.com/axmq/ax/types/message"
 )
 
 // Subscription represents an active subscription with all MQTT 5.0 features
@@ -17,6 +19,11 @@ type Subscription struct {
 	SharedGroup            string // For shared subscriptions ($share/groupname/topic)
 }
 
+// RetainedMessage represents a retained message
+type RetainedMessage struct {
+	Message *message.Message
+}
+
 // SubscriberInfo contains subscriber metadata for routing
 type SubscriberInfo struct {
 	ClientID               string
@@ -27,22 +34,22 @@ type SubscriberInfo struct {
 	SubscriptionIdentifier uint32
 }
 
-// TopicAlias manages topic alias mapping for MQTT 5.0
-type TopicAlias struct {
+// Alias manages topic alias mapping for MQTT 5.0
+type Alias struct {
 	maxAlias uint16
 	aliases  map[uint16]string
 }
 
 // NewTopicAlias creates a new topic alias manager
-func NewTopicAlias(maxAlias uint16) *TopicAlias {
-	return &TopicAlias{
+func NewTopicAlias(maxAlias uint16) *Alias {
+	return &Alias{
 		maxAlias: maxAlias,
 		aliases:  make(map[uint16]string),
 	}
 }
 
 // Set maps an alias to a topic
-func (ta *TopicAlias) Set(alias uint16, topic string) bool {
+func (ta *Alias) Set(alias uint16, topic string) bool {
 	if alias == 0 || alias > ta.maxAlias {
 		return false
 	}
@@ -51,13 +58,13 @@ func (ta *TopicAlias) Set(alias uint16, topic string) bool {
 }
 
 // Get retrieves the topic for an alias
-func (ta *TopicAlias) Get(alias uint16) (string, bool) {
+func (ta *Alias) Get(alias uint16) (string, bool) {
 	topic, ok := ta.aliases[alias]
 	return topic, ok
 }
 
 // Clear removes all aliases
-func (ta *TopicAlias) Clear() {
+func (ta *Alias) Clear() {
 	ta.aliases = make(map[uint16]string)
 }
 
