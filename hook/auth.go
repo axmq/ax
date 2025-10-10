@@ -68,6 +68,10 @@ func (h *BasicAuthHook) Clear() {
 
 // OnConnectAuthenticate validates username and password
 func (h *BasicAuthHook) OnConnectAuthenticate(client *Client, packet *ConnectPacket) bool {
+	if packet == nil {
+		return false
+	}
+
 	h.mu.RLock()
 	expectedPassword, exists := h.users[packet.Username]
 	h.mu.RUnlock()
