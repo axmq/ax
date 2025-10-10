@@ -1,5 +1,7 @@
 package topic
 
+import "strings"
+
 type TopicMatcher struct{}
 
 func NewTopicMatcher() *TopicMatcher {
@@ -11,6 +13,12 @@ func (tm *TopicMatcher) Match(filter, topic string) bool {
 }
 
 func matchTopicFilter(filter, topic string) bool {
+	if strings.HasPrefix(topic, "$") &&
+		(strings.Contains(filter, "#") ||
+			strings.Contains(filter, "+")) {
+		return false
+	}
+
 	if filter == topic {
 		return true
 	}
