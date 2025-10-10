@@ -231,7 +231,7 @@ func (r *Router) Clear() {
 
 // SetRetainedMessage stores a retained message for a topic
 func (r *Router) SetRetainedMessage(ctx context.Context, msg *RetainedMessage) error {
-	return r.retainedManager.Set(ctx, msg.Topic, msg.Message)
+	return r.retainedManager.Set(ctx, msg.Message.Topic, msg.Message)
 }
 
 // GetRetainedMessages retrieves retained messages matching a topic filter
@@ -245,7 +245,6 @@ func (r *Router) GetRetainedMessages(ctx context.Context, topicFilter string) ([
 	retained := make([]*RetainedMessage, 0, len(messages))
 	for _, msg := range messages {
 		retained = append(retained, &RetainedMessage{
-			Topic:   msg.Topic,
 			Message: msg,
 		})
 	}

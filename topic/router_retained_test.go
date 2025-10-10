@@ -22,7 +22,7 @@ func TestRouter_RetainedMessages(t *testing.T) {
 			test: func(t *testing.T, r *Router) {
 				ctx := context.Background()
 				msg := message.NewMessage(1, "test/topic", []byte("retained data"), encoding.QoS1, true, nil)
-				retained := &RetainedMessage{Topic: "test/topic", Message: msg}
+				retained := &RetainedMessage{Message: msg}
 
 				err := r.SetRetainedMessage(ctx, retained)
 				assert.NoError(t, err)
@@ -30,7 +30,7 @@ func TestRouter_RetainedMessages(t *testing.T) {
 				messages, err := r.GetRetainedMessages(ctx, "test/topic")
 				assert.NoError(t, err)
 				assert.Len(t, messages, 1)
-				assert.Equal(t, "test/topic", messages[0].Topic)
+				assert.Equal(t, "test/topic", messages[0].Message.Topic)
 				assert.Equal(t, []byte("retained data"), messages[0].Message.Payload)
 			},
 		},
@@ -40,8 +40,8 @@ func TestRouter_RetainedMessages(t *testing.T) {
 				ctx := context.Background()
 				msg1 := message.NewMessage(1, "home/room1/temp", []byte("data1"), encoding.QoS1, true, nil)
 				msg2 := message.NewMessage(2, "home/room2/temp", []byte("data2"), encoding.QoS1, true, nil)
-				r.SetRetainedMessage(ctx, &RetainedMessage{Topic: "home/room1/temp", Message: msg1})
-				r.SetRetainedMessage(ctx, &RetainedMessage{Topic: "home/room2/temp", Message: msg2})
+				r.SetRetainedMessage(ctx, &RetainedMessage{Message: msg1})
+				r.SetRetainedMessage(ctx, &RetainedMessage{Message: msg2})
 			},
 			test: func(t *testing.T, r *Router) {
 				ctx := context.Background()
@@ -55,7 +55,7 @@ func TestRouter_RetainedMessages(t *testing.T) {
 			setup: func(r *Router) {
 				ctx := context.Background()
 				msg := message.NewMessage(1, "test/topic", []byte("data"), encoding.QoS1, true, nil)
-				r.SetRetainedMessage(ctx, &RetainedMessage{Topic: "test/topic", Message: msg})
+				r.SetRetainedMessage(ctx, &RetainedMessage{Message: msg})
 			},
 			test: func(t *testing.T, r *Router) {
 				ctx := context.Background()
@@ -65,7 +65,7 @@ func TestRouter_RetainedMessages(t *testing.T) {
 				assert.Len(t, messages, 1)
 
 				emptyMsg := message.NewMessage(2, "test/topic", []byte{}, encoding.QoS0, true, nil)
-				err = r.SetRetainedMessage(ctx, &RetainedMessage{Topic: "test/topic", Message: emptyMsg})
+				err = r.SetRetainedMessage(ctx, &RetainedMessage{Message: emptyMsg})
 				assert.NoError(t, err)
 
 				messages, err = r.GetRetainedMessages(ctx, "test/topic")
@@ -78,7 +78,7 @@ func TestRouter_RetainedMessages(t *testing.T) {
 			setup: func(r *Router) {
 				ctx := context.Background()
 				msg := message.NewMessage(1, "test/topic", []byte("data"), encoding.QoS1, true, nil)
-				r.SetRetainedMessage(ctx, &RetainedMessage{Topic: "test/topic", Message: msg})
+				r.SetRetainedMessage(ctx, &RetainedMessage{Message: msg})
 			},
 			test: func(t *testing.T, r *Router) {
 				ctx := context.Background()
@@ -97,7 +97,7 @@ func TestRouter_RetainedMessages(t *testing.T) {
 				ctx := context.Background()
 				for i := 0; i < 5; i++ {
 					msg := message.NewMessage(uint16(i), "test/topic", []byte("data"), encoding.QoS1, true, nil)
-					r.SetRetainedMessage(ctx, &RetainedMessage{Topic: "test/topic", Message: msg})
+					r.SetRetainedMessage(ctx, &RetainedMessage{Message: msg})
 				}
 			},
 			test: func(t *testing.T, r *Router) {
@@ -114,9 +114,9 @@ func TestRouter_RetainedMessages(t *testing.T) {
 				msg1 := message.NewMessage(1, "topic1", []byte("data1"), encoding.QoS1, true, nil)
 				msg2 := message.NewMessage(2, "topic2", []byte("data2"), encoding.QoS1, true, nil)
 				msg3 := message.NewMessage(3, "topic3", []byte("data3"), encoding.QoS1, true, nil)
-				r.SetRetainedMessage(ctx, &RetainedMessage{Topic: "topic1", Message: msg1})
-				r.SetRetainedMessage(ctx, &RetainedMessage{Topic: "topic2", Message: msg2})
-				r.SetRetainedMessage(ctx, &RetainedMessage{Topic: "topic3", Message: msg3})
+				r.SetRetainedMessage(ctx, &RetainedMessage{Message: msg1})
+				r.SetRetainedMessage(ctx, &RetainedMessage{Message: msg2})
+				r.SetRetainedMessage(ctx, &RetainedMessage{Message: msg3})
 			},
 			test: func(t *testing.T, r *Router) {
 				ctx := context.Background()
@@ -154,7 +154,7 @@ func TestRouter_RetainedMessagesWithSubscription(t *testing.T) {
 	ctx := context.Background()
 
 	msg := message.NewMessage(1, "home/temperature", []byte("25.5"), encoding.QoS1, true, nil)
-	err := router.SetRetainedMessage(ctx, &RetainedMessage{Topic: "home/temperature", Message: msg})
+	err := router.SetRetainedMessage(ctx, &RetainedMessage{Message: msg})
 	assert.NoError(t, err)
 
 	sub := &Subscription{
@@ -170,7 +170,7 @@ func TestRouter_RetainedMessagesWithSubscription(t *testing.T) {
 	messages, err := router.GetRetainedMessages(ctx, "home/+")
 	assert.NoError(t, err)
 	assert.Len(t, messages, 1)
-	assert.Equal(t, "home/temperature", messages[0].Topic)
+	assert.Equal(t, "home/temperature", messages[0].Message.Topic)
 }
 
 func TestRouter_RetainedMessagesWithExpiry(t *testing.T) {
@@ -187,7 +187,7 @@ func TestRouter_RetainedMessagesWithExpiry(t *testing.T) {
 		true,
 		map[string]interface{}{"MessageExpiryInterval": uint32(60)},
 	)
-	err := router.SetRetainedMessage(ctx, &RetainedMessage{Topic: "test/expiry", Message: msg})
+	err := router.SetRetainedMessage(ctx, &RetainedMessage{Message: msg})
 	assert.NoError(t, err)
 
 	messages, err := router.GetRetainedMessages(ctx, "test/expiry")
@@ -210,7 +210,7 @@ func TestRouter_ConcurrentRetainedOperations(t *testing.T) {
 		go func(id int) {
 			for j := 0; j < numOperations; j++ {
 				msg := message.NewMessage(uint16(j), "test/topic", []byte("data"), encoding.QoS1, true, nil)
-				router.SetRetainedMessage(ctx, &RetainedMessage{Topic: "test/topic", Message: msg})
+				router.SetRetainedMessage(ctx, &RetainedMessage{Message: msg})
 				router.GetRetainedMessages(ctx, "test/topic")
 				router.RetainedMessageCount(ctx)
 				if j%10 == 0 {
