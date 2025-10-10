@@ -5,6 +5,10 @@ import (
 	"time"
 )
 
+// expiryWindowMultiplier defines how many window periods to wait before cleaning up inactive rate limiters.
+// A limiter is considered inactive if it hasn't been accessed for (window * expiryWindowMultiplier).
+const expiryWindowMultiplier = 3
+
 // RateLimitHook provides rate limiting for MQTT operations
 type RateLimitHook struct {
 	*Base
@@ -54,7 +58,7 @@ func (h *RateLimitHook) Stop() error {
 }
 
 // OnPublish checks if the client has exceeded the rate limit
-func (h *RateLimitHook) OnPublish(client *Client, packet *PublishPacket) error {
+func (h *RateLimitHook) OnPublish(client *Client, _ *PublishPacket) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -162,7 +166,7 @@ func (h *RateLimitHook) cleanup() {
 	defer h.mu.Unlock()
 
 	now := time.Now()
-	expiry := h.window * 3
+	expiry := h.window * expiryWindowMultiplier
 
 	for clientID, limiter := range h.limiters {
 		if now.Sub(limiter.lastAccess) > expiry {
@@ -340,7 +344,7 @@ func (h *MultiLevelRateLimitHook) cleanup() {
 	defer h.mu.Unlock()
 
 	now := time.Now()
-	expiry := h.window * 3
+	expiry := h.window * expiryWindowMultiplier
 
 	for key, limiter := range h.clientLimiters {
 		if now.Sub(limiter.lastAccess) > expiry {
