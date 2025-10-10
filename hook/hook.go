@@ -356,13 +356,18 @@ func (s *Subscribers) Add(sub *Subscription) {
 
 // Remove removes a subscription from the list by client ID
 func (s *Subscribers) Remove(clientID string) {
-	filtered := s.Subscriptions[:0]
+	n := 0
 	for _, sub := range s.Subscriptions {
 		if sub.ClientID != clientID {
-			filtered = append(filtered, sub)
+			s.Subscriptions[n] = sub
+			n++
 		}
 	}
-	s.Subscriptions = filtered
+	// Nil out the rest of the slice to prevent memory leaks
+	for i := n; i < len(s.Subscriptions); i++ {
+		s.Subscriptions[i] = nil
+	}
+	s.Subscriptions = s.Subscriptions[:n]
 }
 
 // Clear clears the list of subscriptions

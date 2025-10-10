@@ -1074,6 +1074,149 @@ func TestSubscribersHelpers(t *testing.T) {
 	assert.Len(t, subs.Subscriptions, 0)
 }
 
+func TestSubscribersRemoveMemoryLeak(t *testing.T) {
+	subs := &Subscribers{}
+
+	sub1 := &Subscription{ClientID: "client1", TopicFilter: "test/1"}
+	sub2 := &Subscription{ClientID: "client2", TopicFilter: "test/2"}
+	sub3 := &Subscription{ClientID: "client3", TopicFilter: "test/3"}
+	sub4 := &Subscription{ClientID: "client4", TopicFilter: "test/4"}
+
+	subs.Add(sub1)
+	subs.Add(sub2)
+	subs.Add(sub3)
+	subs.Add(sub4)
+
+	originalCap := cap(subs.Subscriptions)
+	assert.Len(t, subs.Subscriptions, 4)
+
+	subs.Remove("client2")
+
+	assert.Len(t, subs.Subscriptions, 3)
+
+	assert.Equal(t, "client1", subs.Subscriptions[0].ClientID)
+	assert.Equal(t, "client3", subs.Subscriptions[1].ClientID)
+	assert.Equal(t, "client4", subs.Subscriptions[2].ClientID)
+
+	for _, sub := range subs.Subscriptions {
+		assert.NotEqual(t, "client2", sub.ClientID)
+	}
+
+	assert.Equal(t, originalCap, cap(subs.Subscriptions))
+}
+
+func TestSubscribersRemoveMultiple(t *testing.T) {
+	subs := &Subscribers{}
+
+	sub1 := &Subscription{ClientID: "client1", TopicFilter: "test/1"}
+	sub2 := &Subscription{ClientID: "client2", TopicFilter: "test/2"}
+	sub3 := &Subscription{ClientID: "client1", TopicFilter: "test/3"} // Duplicate client ID
+	sub4 := &Subscription{ClientID: "client3", TopicFilter: "test/4"}
+
+	subs.Add(sub1)
+	subs.Add(sub2)
+	subs.Add(sub3)
+	subs.Add(sub4)
+
+	assert.Len(t, subs.Subscriptions, 4)
+
+	subs.Remove("client1")
+
+	assert.Len(t, subs.Subscriptions, 2)
+
+	assert.Equal(t, "client2", subs.Subscriptions[0].ClientID)
+	assert.Equal(t, "client3", subs.Subscriptions[1].ClientID)
+
+	for _, sub := range subs.Subscriptions {
+		assert.NotEqual(t, "client1", sub.ClientID)
+	}
+}
+
+func TestSubscribersRemoveNonExistent(t *testing.T) {
+	subs := &Subscribers{}
+
+	sub1 := &Subscription{ClientID: "client1", TopicFilter: "test/1"}
+	sub2 := &Subscription{ClientID: "client2", TopicFilter: "test/2"}
+
+	subs.Add(sub1)
+	subs.Add(sub2)
+
+	assert.Len(t, subs.Subscriptions, 2)
+
+	// Remove a client that doesn't exist
+	subs.Remove("client999")
+
+	assert.Len(t, subs.Subscriptions, 2)
+	assert.Equal(t, "client1", subs.Subscriptions[0].ClientID)
+	assert.Equal(t, "client2", subs.Subscriptions[1].ClientID)
+}
+
+func TestSubscribersRemoveFirst(t *testing.T) {
+	subs := &Subscribers{}
+
+	sub1 := &Subscription{ClientID: "client1", TopicFilter: "test/1"}
+	sub2 := &Subscription{ClientID: "client2", TopicFilter: "test/2"}
+	sub3 := &Subscription{ClientID: "client3", TopicFilter: "test/3"}
+
+	subs.Add(sub1)
+	subs.Add(sub2)
+	subs.Add(sub3)
+
+	subs.Remove("client1")
+
+	assert.Len(t, subs.Subscriptions, 2)
+	assert.Equal(t, "client2", subs.Subscriptions[0].ClientID)
+	assert.Equal(t, "client3", subs.Subscriptions[1].ClientID)
+}
+
+func TestSubscribersRemoveLast(t *testing.T) {
+	subs := &Subscribers{}
+
+	sub1 := &Subscription{ClientID: "client1", TopicFilter: "test/1"}
+	sub2 := &Subscription{ClientID: "client2", TopicFilter: "test/2"}
+	sub3 := &Subscription{ClientID: "client3", TopicFilter: "test/3"}
+
+	subs.Add(sub1)
+	subs.Add(sub2)
+	subs.Add(sub3)
+
+	subs.Remove("client3")
+
+	assert.Len(t, subs.Subscriptions, 2)
+	assert.Equal(t, "client1", subs.Subscriptions[0].ClientID)
+	assert.Equal(t, "client2", subs.Subscriptions[1].ClientID)
+}
+
+func TestSubscribersRemoveAll(t *testing.T) {
+	subs := &Subscribers{}
+
+	sub1 := &Subscription{ClientID: "client1", TopicFilter: "test/1"}
+	sub2 := &Subscription{ClientID: "client2", TopicFilter: "test/2"}
+	sub3 := &Subscription{ClientID: "client3", TopicFilter: "test/3"}
+
+	subs.Add(sub1)
+	subs.Add(sub2)
+	subs.Add(sub3)
+
+	assert.Len(t, subs.Subscriptions, 3)
+
+	subs.Remove("client1")
+	assert.Len(t, subs.Subscriptions, 2)
+
+	subs.Remove("client2")
+	assert.Len(t, subs.Subscriptions, 1)
+
+	subs.Remove("client3")
+	assert.Len(t, subs.Subscriptions, 0)
+}
+
+func TestSubscribersRemoveFromEmpty(t *testing.T) {
+	subs := &Subscribers{}
+
+	subs.Remove("client1")
+	assert.Len(t, subs.Subscriptions, 0)
+}
+
 func TestManagerWithRealNetAddr(t *testing.T) {
 	m := NewManager()
 	h := newTestHook("test", OnConnect)
